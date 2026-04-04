@@ -156,14 +156,19 @@ export async function spawnAcpClient(opts = {}) {
     }
   });
 
-  await Promise.race([
-    client.request("initialize", {
-      protocolVersion: 1,
-      clientInfo: { name: "gemini-companion", version: "1.0.0" },
-      clientCapabilities: {},
-    }),
-    timeout,
-  ]);
+  try {
+    await Promise.race([
+      client.request("initialize", {
+        protocolVersion: 1,
+        clientInfo: { name: "gemini-companion", version: "1.0.0" },
+        clientCapabilities: {},
+      }),
+      timeout,
+    ]);
+  } catch (err) {
+    await client.close().catch(() => {});
+    throw err;
+  }
 
   return client;
 }
@@ -173,20 +178,24 @@ export async function spawnAcpClient(opts = {}) {
  */
 export async function createSession(opts = {}) {
   const client = await spawnAcpClient(opts);
-  const { sessionId } = await client.request("session/new", {
-    cwd: opts.cwd ?? process.cwd(),
-  });
-  await client.request("session/set_mode", {
-    sessionId,
-    modeId: opts.modeId ?? "default",
-  });
-  if (opts.model) {
-    await client.request("session/set_model", {
+  try {
+    const cwd = opts.cwd ?? process.cwd();
+    const { sessionId } = await client.request("session/new", { cwd });
+    await client.request("session/set_mode", {
       sessionId,
-      modelId: opts.model,
+      modeId: opts.modeId ?? "default",
     });
+    if (opts.model) {
+      await client.request("session/set_model", {
+        sessionId,
+        modelId: opts.model,
+      });
+    }
+    return { client, sessionId };
+  } catch (err) {
+    await client.close().catch(() => {});
+    throw err;
   }
-  return { client, sessionId };
 }
 
 /**
@@ -194,11 +203,14 @@ export async function createSession(opts = {}) {
  */
 export async function resumeSession(sessionId, opts = {}) {
   const client = await spawnAcpClient(opts);
-  await client.request("session/load", {
-    sessionId,
-    cwd: opts.cwd ?? process.cwd(),
-  });
-  return { client, sessionId };
+  try {
+    const cwd = opts.cwd ?? process.cwd();
+    await client.request("session/load", { sessionId, cwd });
+    return { client, sessionId };
+  } catch (err) {
+    await client.close().catch(() => {});
+    throw err;
+  }
 }
 
 /**
