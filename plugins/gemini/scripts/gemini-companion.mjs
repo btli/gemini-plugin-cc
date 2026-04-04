@@ -7,8 +7,7 @@ import process from "node:process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, splitRawArgumentString } from "./lib/args.mjs";
-import { readJsonFile } from "./lib/fs.mjs";
+import { parseArgs } from "./lib/args.mjs";
 import {
   collectReviewContext,
   getReviewDiffStats,
@@ -20,7 +19,6 @@ import {
   getGeminiAuthStatus,
   runGeminiReview,
   runGeminiTask,
-  parseStructuredOutput,
   readOutputSchema,
   findLatestTaskSession,
   installShutdownHandler
@@ -31,8 +29,7 @@ import {
   enrichJob,
   resolveCancelableJob,
   resolveResultJob,
-  readStoredJob,
-  sortJobsNewestFirst
+  readStoredJob
 } from "./lib/job-control.mjs";
 import { binaryAvailable, isProcessAlive, terminateProcessTree } from "./lib/process.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
@@ -47,11 +44,9 @@ import {
 } from "./lib/render.mjs";
 import { getConfig, setConfig, listJobs, upsertJob, writeJobFile } from "./lib/state.mjs";
 import {
-  SESSION_ID_ENV,
   nowIso,
   createJobRecord,
-  createJobLogFile,
-  runTrackedJob
+  createJobLogFile
 } from "./lib/tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
@@ -216,10 +211,7 @@ function executeReviewBackground(cwd, target, kind, options = {}) {
   const logFd = fs.openSync(logFile, "a");
   const child = spawn(process.execPath, workerArgs, {
     cwd,
-    env: {
-      ...process.env,
-      ...(process.env[SESSION_ID_ENV] ? { [SESSION_ID_ENV]: process.env[SESSION_ID_ENV] } : {})
-    },
+    env: { ...process.env },
     detached: true,
     stdio: ["ignore", logFd, logFd]
   });
@@ -389,10 +381,7 @@ async function executeTask(cwd, prompt, options = {}) {
     const logFd = fs.openSync(logFile, "a");
     const child = spawn(process.execPath, workerArgs, {
       cwd,
-      env: {
-        ...process.env,
-        ...(process.env[SESSION_ID_ENV] ? { [SESSION_ID_ENV]: process.env[SESSION_ID_ENV] } : {})
-      },
+      env: { ...process.env },
       detached: true,
       stdio: ["ignore", logFd, logFd]
     });
