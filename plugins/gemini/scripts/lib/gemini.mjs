@@ -4,6 +4,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { readJsonFile } from "./fs.mjs";
+import { resolveModel } from "./models.mjs";
 export { resolveModel as normalizeRequestedModel } from "./models.mjs";
 
 export function getGeminiAvailability(cwd) {
@@ -58,7 +59,7 @@ function buildGeminiArgs(options = {}) {
   }
 
   if (options.model) {
-    const model = normalizeRequestedModel(options.model);
+    const model = resolveModel(options.model);
     if (model) {
       args.push("-m", model);
     }
