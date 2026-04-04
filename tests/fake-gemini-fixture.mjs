@@ -1,21 +1,21 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { writeExecutable } from "./helpers.mjs";
 
 const FAKE_VERSION = "0.36.0";
 
-const FAKE_REVIEW_RESPONSE = JSON.stringify({
+const REVIEW_JSON = JSON.stringify({
   verdict: "needs-attention",
   summary: "Found a potential null reference and a missing error handler.",
   findings: [
     {
       severity: "high",
       title: "Potential null dereference",
-      body: "The variable `user` may be null when accessed at this line.",
+      body: "The variable user may be null when accessed at this line.",
       file: "src/index.js",
       line_start: 42,
       line_end: 42,
-      confidence: 0.9,
       recommendation: "Add a null check before accessing user properties."
     },
     {
@@ -25,7 +25,6 @@ const FAKE_REVIEW_RESPONSE = JSON.stringify({
       file: "src/db.js",
       line_start: 15,
       line_end: 20,
-      confidence: 0.8,
       recommendation: "Wrap the database call in a try-catch block."
     }
   ],
@@ -35,84 +34,238 @@ const FAKE_REVIEW_RESPONSE = JSON.stringify({
   ]
 });
 
-const FAKE_TASK_RESPONSE = "I investigated the issue and found that the test failure is caused by a missing import. The fix is to add `import { helper } from './utils'` at the top of the test file.";
+function generateScript(behavior, statePath) {
+  // Escape for embedding inside a JS template literal that itself lives inside
+  // a JS string — we only need to escape backslashes and backticks.
+  const escapedStatePath = statePath.replace(/\\/g, "\\\\").replace(/`/g, "\\`");
+  const escapedReviewJson = REVIEW_JSON.replace(/\\/g, "\\\\").replace(/`/g, "\\`").replace(/\$/g, "\\$");
+  const escapedBehavior = behavior.replace(/`/g, "\\`");
 
-function generateScript() {
   return `#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const readline = require('node:readline');
+
+const BEHAVIOR = ${JSON.stringify(behavior)};
+const STATE_PATH = ${JSON.stringify(statePath)};
+const REVIEW_JSON = ${JSON.stringify(REVIEW_JSON)};
+
+// --- State helpers ---
+function loadState() {
+  try { return JSON.parse(fs.readFileSync(STATE_PATH, 'utf8')); } catch { return {}; }
+}
+function saveState(s) {
+  fs.writeFileSync(STATE_PATH, JSON.stringify(s, null, 2), 'utf8');
+}
+
+// --- Version check ---
 const args = process.argv.slice(2);
-
-// --version
-if (args.includes("--version")) {
-  process.stdout.write("${FAKE_VERSION}\\n");
+if (args.includes('--version')) {
+  process.stdout.write(${JSON.stringify(FAKE_VERSION)} + '\\n');
   process.exit(0);
 }
 
-// auth login
-if (args[0] === "auth" && args[1] === "login") {
-  process.stdout.write("Already authenticated.\\n");
-  process.exit(0);
-}
-
-// Parse flags
-let prompt = "";
-let outputFormat = "text";
-let approvalMode = "plan";
-let hasPromptFlag = false;
-
-for (let i = 0; i < args.length; i++) {
-  if (args[i] === "-p" && args[i + 1]) {
-    prompt = args[i + 1];
-    hasPromptFlag = true;
-    i++;
-  } else if (args[i] === "-o" && args[i + 1]) {
-    outputFormat = args[i + 1];
-    i++;
-  } else if (args[i] === "--approval-mode" && args[i + 1]) {
-    approvalMode = args[i + 1];
-    i++;
-  }
-}
-
-if (!hasPromptFlag) {
-  process.stderr.write("No prompt provided.\\n");
+// --- ACP mode ---
+if (!args.includes('--acp')) {
+  process.stderr.write('fake-gemini: unknown invocation\\n');
   process.exit(1);
 }
 
-// Detect review vs task based on prompt content
-const isReview = prompt.toLowerCase().includes("review") || prompt.toLowerCase().includes("findings");
-
-const sessionId = "test-session-" + Date.now();
-
-if (outputFormat === "json") {
-  const response = isReview ? ${JSON.stringify(FAKE_REVIEW_RESPONSE)} : ${JSON.stringify(FAKE_TASK_RESPONSE)};
-  const output = JSON.stringify({
-    session_id: sessionId,
-    response: response,
-    stats: { tokens_in: 1000, tokens_out: 500, duration_ms: 2000 }
-  });
-  process.stdout.write(output + "\\n");
-} else if (outputFormat === "stream-json") {
-  // NDJSON stream
-  process.stdout.write(JSON.stringify({ type: "init", session_id: sessionId, model: "gemini-3-flash" }) + "\\n");
-  const response = isReview ? ${JSON.stringify(FAKE_REVIEW_RESPONSE)} : ${JSON.stringify(FAKE_TASK_RESPONSE)};
-  process.stdout.write(JSON.stringify({ type: "message", role: "assistant", content: response }) + "\\n");
-  process.stdout.write(JSON.stringify({ type: "result", status: "success", stats: { tokens_in: 1000, tokens_out: 500 } }) + "\\n");
-} else {
-  const response = isReview ? ${JSON.stringify(FAKE_REVIEW_RESPONSE)} : ${JSON.stringify(FAKE_TASK_RESPONSE)};
-  process.stdout.write(response + "\\n");
+// --- JSON-RPC helpers ---
+function send(obj) {
+  process.stdout.write(JSON.stringify(obj) + '\\n');
 }
 
-process.exit(0);
+function sendNotification(method, params) {
+  send({ jsonrpc: '2.0', method, params });
+}
+
+function sendResult(id, result) {
+  send({ jsonrpc: '2.0', id, result });
+}
+
+function sendError(id, code, message) {
+  send({ jsonrpc: '2.0', id, error: { code, message } });
+}
+
+// --- Session state ---
+const state = loadState();
+state.calls = state.calls || [];
+
+// --- Prompt handler ---
+function handlePrompt(id, params) {
+  state.calls.push({ method: 'session/prompt', params });
+  saveState(state);
+
+  if (BEHAVIOR === 'crash') {
+    process.exit(1);
+  }
+
+  if (BEHAVIOR === 'hang') {
+    // Never respond
+    return;
+  }
+
+  if (BEHAVIOR === 'rate-limit') {
+    sendError(id, -32000, '429 RESOURCE_EXHAUSTED: rate limit exceeded');
+    return;
+  }
+
+  if (BEHAVIOR === 'permission') {
+    // Server-initiated permission request
+    sendNotification('session/request_permission', {
+      id: 9999,
+      permission: { type: 'exec', command: 'ls' }
+    });
+    // Wait for client response on stdin, then complete
+    // We handle this by setting a flag; the readline loop will send the result
+    // after the permission response arrives.
+    state._pendingPromptId = id;
+    saveState(state);
+    return;
+  }
+
+  if (BEHAVIOR === 'write-in-readonly') {
+    sendNotification('session/update', {
+      type: 'tool_call',
+      tool: 'fs/write_text_file',
+      params: { path: '/tmp/test.txt', content: 'hello' }
+    });
+    sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
+    return;
+  }
+
+  if (BEHAVIOR === 'path-escape') {
+    sendNotification('session/update', {
+      type: 'tool_call',
+      tool: 'fs/read_text_file',
+      params: { path: '../../etc/passwd' }
+    });
+    sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
+    return;
+  }
+
+  // review-ok or session-load
+  if (BEHAVIOR === 'review-ok' || BEHAVIOR === 'session-load') {
+    sendNotification('session/update', { type: 'chunk', text: REVIEW_JSON });
+    sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
+    return;
+  }
+
+  // Default: task-ok
+  sendNotification('session/update', { type: 'chunk', text: 'Task complete.' });
+  sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
+}
+
+// --- Readline loop ---
+const rl = readline.createInterface({ input: process.stdin, terminal: false });
+
+rl.on('line', (line) => {
+  let msg;
+  try { msg = JSON.parse(line); } catch { return; }
+
+  const { id, method, params } = msg;
+  const isNotification = id === undefined || id === null;
+
+  state.calls = state.calls || [];
+
+  switch (method) {
+    case 'initialize':
+      state.calls.push({ method, params });
+      saveState(state);
+      sendResult(id, {
+        protocolVersion: '2024-11-05',
+        capabilities: {},
+        serverInfo: { name: 'fake-gemini', version: ${JSON.stringify(FAKE_VERSION)} }
+      });
+      break;
+
+    case 'session/new':
+      state.sessionId = 'fake-session-' + Date.now();
+      state.calls.push({ method, params });
+      saveState(state);
+      sendResult(id, { sessionId: state.sessionId });
+      break;
+
+    case 'session/load':
+      state.calls.push({ method, params });
+      saveState(state);
+      sendResult(id, { sessionId: params && params.sessionId ? params.sessionId : state.sessionId || 'fake-session' });
+      break;
+
+    case 'session/set_mode':
+    case 'session/set_model':
+      state.calls.push({ method, params });
+      saveState(state);
+      sendResult(id, {});
+      break;
+
+    case 'session/prompt':
+      handlePrompt(id, params);
+      break;
+
+    case 'session/cancel':
+      // Notification — no id, no response
+      state.calls.push({ method, params });
+      saveState(state);
+      break;
+
+    case 'session/list':
+      state.calls.push({ method, params });
+      saveState(state);
+      sendResult(id, { sessions: state.sessionId ? [{ sessionId: state.sessionId }] : [] });
+      break;
+
+    case 'session/close':
+      state.calls.push({ method, params });
+      saveState(state);
+      sendResult(id, {});
+      break;
+
+    default:
+      if (!isNotification) {
+        // Check if this is a permission response (result with no method)
+        if (msg.result !== undefined && state._pendingPromptId !== undefined) {
+          const pendingId = state._pendingPromptId;
+          delete state._pendingPromptId;
+          saveState(state);
+          sendNotification('session/update', { type: 'chunk', text: 'Task complete.' });
+          sendResult(pendingId, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
+        } else {
+          sendError(id, -32601, 'Method not found: ' + method);
+        }
+      }
+      break;
+  }
+});
+
+rl.on('close', () => {
+  process.exit(0);
+});
 `;
 }
 
-export function installFakeGemini(binDir) {
+/**
+ * Install fake gemini binary into binDir.
+ * @param {string} binDir - directory to install into (created if needed)
+ * @param {string} [behavior="task-ok"] - behavior preset
+ * @returns {string} path to state JSON file
+ */
+export function installFakeGemini(binDir, behavior = "task-ok") {
   fs.mkdirSync(binDir, { recursive: true });
+  const statePath = path.join(binDir, "fake-gemini-state.json");
   const scriptPath = path.join(binDir, "gemini");
-  fs.writeFileSync(scriptPath, generateScript(), { mode: 0o755 });
-  return scriptPath;
+  const source = generateScript(behavior, statePath);
+  writeExecutable(scriptPath, source);
+  return statePath;
 }
 
+/**
+ * Create environment variables for running gemini-companion with the fake binary.
+ * @param {string} binDir
+ * @returns {{ PATH: string, HOME: string, GEMINI_API_KEY: string }}
+ */
 export function createFakeGeminiEnv(binDir) {
   return {
     PATH: `${binDir}:${process.env.PATH}`,
@@ -121,6 +274,24 @@ export function createFakeGeminiEnv(binDir) {
   };
 }
 
+/**
+ * Read the persisted state from the fake gemini binary.
+ * @param {string} binDir
+ * @returns {object|null}
+ */
+export function readFakeState(binDir) {
+  const statePath = path.join(binDir, "fake-gemini-state.json");
+  try {
+    return JSON.parse(fs.readFileSync(statePath, "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Remove the fake gemini bin directory.
+ * @param {string} binDir
+ */
 export function removeFakeGemini(binDir) {
   try {
     fs.rmSync(binDir, { recursive: true, force: true });

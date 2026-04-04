@@ -57,3 +57,7 @@ export function writeFile(dirPath, name, content) {
   fs.writeFileSync(filePath, content, "utf8");
   return filePath;
 }
+
+export function writeExecutable(filePath, source) {
+  fs.writeFileSync(filePath, source, { encoding: "utf8", mode: 0o755 });
+}
