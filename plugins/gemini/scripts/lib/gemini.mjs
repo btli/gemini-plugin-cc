@@ -7,6 +7,7 @@ import { binaryAvailable } from "./process.mjs";
 import { readJsonFile } from "./fs.mjs";
 import { appendLogLine } from "./tracked-jobs.mjs";
 import { upsertJob } from "./state.mjs";
+import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 // Backward-compat re-export: gemini-companion.mjs imports this name
 export { resolveModel as normalizeRequestedModel } from "./models.mjs";
@@ -167,17 +168,18 @@ export async function runGeminiTask(cwd, options = {}) {
 
   const resolvedModel = resolveModel(model);
   const modeId = write ? "default" : "plan";
+  const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
 
   let client, sessionId;
   try {
     if (resume) {
       ({ client, sessionId } = await resumeSession(resume, {
-        cwd, env, workspaceRoot: workspaceRoot ?? cwd, write, logFile
+        cwd, env, workspaceRoot: effectiveWorkspaceRoot, write, logFile
       }));
     } else {
       ({ client, sessionId } = await createSession({
         cwd, env, modeId, model: resolvedModel,
-        workspaceRoot: workspaceRoot ?? cwd, write, logFile
+        workspaceRoot: effectiveWorkspaceRoot, write, logFile
       }));
     }
   } catch (err) {
@@ -191,9 +193,9 @@ export async function runGeminiTask(cwd, options = {}) {
   }
 
   // Persist sessionId immediately for graceful cancel support
-  if (jobId && workspaceRoot) {
+  if (jobId && effectiveWorkspaceRoot) {
     try {
-      upsertJob(workspaceRoot, { id: jobId, sessionId });
+      upsertJob(effectiveWorkspaceRoot, { id: jobId, sessionId });
     } catch {
       // non-fatal — state write may fail in edge cases
     }
@@ -302,6 +304,7 @@ export async function runGeminiReview(cwd, options = {}) {
   } = options;
 
   // Reviews are always read-only (write: false)
+  const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
   const taskResult = await runGeminiTask(cwd, {
     prompt,
     model,
@@ -309,7 +312,7 @@ export async function runGeminiReview(cwd, options = {}) {
     logFile,
     onProgress,
     env,
-    workspaceRoot
+    workspaceRoot: effectiveWorkspaceRoot
   });
 
   if (!taskResult.ok) {
