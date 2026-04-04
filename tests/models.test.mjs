@@ -4,12 +4,12 @@ import assert from "node:assert/strict";
 import { resolveModel, suggestAlternatives, MODEL_ALIASES } from "../plugins/gemini/scripts/lib/models.mjs";
 
 describe("resolveModel", () => {
-  it("resolves 'flash' alias to gemini-3-flash", () => {
-    assert.equal(resolveModel("flash"), "gemini-3-flash");
+  it("resolves 'flash' alias to gemini-3-flash-preview", () => {
+    assert.equal(resolveModel("flash"), "gemini-3-flash-preview");
   });
 
-  it("resolves 'pro' alias to gemini-3.1-pro", () => {
-    assert.equal(resolveModel("pro"), "gemini-3.1-pro");
+  it("resolves 'pro' alias to gemini-3.1-pro-preview", () => {
+    assert.equal(resolveModel("pro"), "gemini-3.1-pro-preview");
   });
 
   it("resolves 'flash-lite' alias", () => {
@@ -17,11 +17,11 @@ describe("resolveModel", () => {
   });
 
   it("resolves 'flash-3' alias", () => {
-    assert.equal(resolveModel("flash-3"), "gemini-3-flash");
+    assert.equal(resolveModel("flash-3"), "gemini-3-flash-preview");
   });
 
   it("resolves 'pro-3' alias", () => {
-    assert.equal(resolveModel("pro-3"), "gemini-3.1-pro");
+    assert.equal(resolveModel("pro-3"), "gemini-3.1-pro-preview");
   });
 
   it("resolves 'flash-2.5' alias", () => {
@@ -30,6 +30,14 @@ describe("resolveModel", () => {
 
   it("resolves 'pro-2.5' alias", () => {
     assert.equal(resolveModel("pro-2.5"), "gemini-2.5-pro");
+  });
+
+  it("resolves 'auto' alias to auto-gemini-3", () => {
+    assert.equal(resolveModel("auto"), "auto-gemini-3");
+  });
+
+  it("resolves 'auto-2.5' alias", () => {
+    assert.equal(resolveModel("auto-2.5"), "auto-gemini-2.5");
   });
 
   it("passes through unknown model names", () => {
@@ -45,14 +53,14 @@ describe("resolveModel", () => {
   });
 
   it("is case-insensitive", () => {
-    assert.equal(resolveModel("Flash"), "gemini-3-flash");
-    assert.equal(resolveModel("PRO"), "gemini-3.1-pro");
+    assert.equal(resolveModel("Flash"), "gemini-3-flash-preview");
+    assert.equal(resolveModel("PRO"), "gemini-3.1-pro-preview");
   });
 });
 
 describe("suggestAlternatives", () => {
   it("returns aliases excluding the failed model", () => {
-    const suggestions = suggestAlternatives("gemini-3-flash");
+    const suggestions = suggestAlternatives("gemini-3-flash-preview");
     assert.ok(suggestions.length > 0);
     assert.ok(!suggestions.includes("flash"));
     assert.ok(!suggestions.includes("flash-3"));

@@ -32,11 +32,13 @@ The plugin provides these Claude Code slash commands:
 ## Model Aliases
 
 The plugin maps short names to full model identifiers:
-- `pro` → `gemini-3.1-pro`
-- `flash` → `gemini-3-flash`
+- `auto` → `auto-gemini-3` (let Gemini choose between pro and flash)
+- `auto-2.5` → `auto-gemini-2.5`
+- `pro` → `gemini-3.1-pro-preview`
+- `flash` → `gemini-3-flash-preview`
 - `flash-lite` → `gemini-2.5-flash-lite`
 
-These are defined in `plugins/gemini/scripts/lib/models.mjs` in the `MODEL_ALIASES` map. The default model (when no `--model` flag is passed) is `gemini-3.1-pro`.
+These are defined in `plugins/gemini/scripts/lib/models.mjs` in the `MODEL_ALIASES` map. The default model (when no `--model` flag is passed) is `gemini-3.1-pro-preview`.
 
 ## How Reviews Work
 
