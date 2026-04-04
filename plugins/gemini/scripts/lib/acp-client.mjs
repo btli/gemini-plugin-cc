@@ -33,7 +33,7 @@ export class JsonRpcClient {
 
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject, method });
-      this.sendMessage({ id, method, params });
+      this.sendMessage({ jsonrpc: "2.0", id, method, params });
     });
   }
 
@@ -41,7 +41,7 @@ export class JsonRpcClient {
     if (this.closed) {
       return;
     }
-    this.sendMessage({ method, params });
+    this.sendMessage({ jsonrpc: "2.0", method, params });
   }
 
   handleChunk(chunk) {
@@ -104,16 +104,18 @@ export class JsonRpcClient {
       Promise.resolve()
         .then(() => handler(message.params))
         .then((result) => {
-          this.sendMessage({ id: message.id, result });
+          this.sendMessage({ jsonrpc: "2.0", id: message.id, result });
         })
         .catch((err) => {
           this.sendMessage({
+            jsonrpc: "2.0",
             id: message.id,
             error: { code: -32000, message: String(err?.message ?? err) }
           });
         });
     } else {
       this.sendMessage({
+        jsonrpc: "2.0",
         id: message.id,
         error: { code: -32601, message: `Unsupported server request: ${message.method}` }
       });
