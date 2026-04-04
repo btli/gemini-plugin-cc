@@ -7,13 +7,14 @@ they already have.
 
 ## What You Get
 
-- `/gemini:review` for a standard Gemini code review
+- `/gemini:review` for a normal read-only Gemini review
 - `/gemini:adversarial-review` for a steerable challenge review
 - `/gemini:rescue`, `/gemini:status`, `/gemini:result`, and `/gemini:cancel` to delegate work and manage background jobs
 
 ## Requirements
 
 - **Google account or Gemini API key.**
+  - Usage will contribute to your Gemini usage limits. [Learn more](https://ai.google.dev/pricing).
 - **Node.js 18.18 or later**
 
 ## Install
@@ -42,15 +43,15 @@ Then run:
 /gemini:setup
 ```
 
-`/gemini:setup` will tell you whether Gemini is ready. If Gemini CLI is missing and npm is available, it can offer to install it for you.
+`/gemini:setup` will tell you whether Gemini is ready. If Gemini CLI is missing and npm is available, it can offer to install Gemini for you.
 
-If you prefer to install Gemini CLI yourself, use:
+If you prefer to install Gemini yourself, use:
 
 ```bash
 npm install -g @google/gemini-cli
 ```
 
-If Gemini CLI is installed but not authenticated yet, run:
+If Gemini is installed but not logged in yet, run:
 
 ```bash
 !gemini auth login
@@ -73,14 +74,17 @@ One simple first run is:
 
 ### `/gemini:review`
 
-Runs a Gemini review on your current work.
+Runs a normal Gemini review on your current work. It gives you a thorough code review covering bugs, security issues, performance problems, and maintainability concerns.
+
+> [!NOTE]
+> Code review especially for multi-file changes might take a while. It's generally recommended to run it in the background.
 
 Use it when you want:
 
 - a review of your current uncommitted changes
 - a review of your branch compared to a base branch like `main`
 
-Use `--base <ref>` for branch review. It also supports `--wait` and `--background`.
+Use `--base <ref>` for branch review. It also supports `--wait` and `--background`. It is not steerable and does not take custom focus text. Use [`/gemini:adversarial-review`](#geminiadversarial-review) when you want to challenge a specific decision or risk area.
 
 Examples:
 
@@ -90,7 +94,7 @@ Examples:
 /gemini:review --background
 ```
 
-This command is read-only and will not perform any changes.
+This command is read-only and will not perform any changes. When run in the background you can use [`/gemini:status`](#geministatus) to check on the progress and [`/gemini:cancel`](#geminicancel) to cancel the ongoing task.
 
 ### `/gemini:adversarial-review`
 
@@ -98,17 +102,24 @@ Runs a **steerable** review that questions the chosen implementation and design.
 
 It can be used to pressure-test assumptions, tradeoffs, failure modes, and whether a different approach would have been safer or simpler.
 
-Unlike `/gemini:review`, it can take extra focus text after the flags.
+It uses the same review target selection as `/gemini:review`, including `--base <ref>` for branch review.
+It also supports `--wait` and `--background`. Unlike `/gemini:review`, it can take extra focus text after the flags.
+
+Use it when you want:
+
+- a review before shipping that challenges the direction, not just the code details
+- review focused on design choices, tradeoffs, hidden assumptions, and alternative approaches
+- pressure-testing around specific risk areas like auth, data loss, rollback, race conditions, or reliability
 
 Examples:
 
 ```bash
 /gemini:adversarial-review
-/gemini:adversarial-review --base main challenge whether this was the right caching design
-/gemini:adversarial-review --background look for race conditions
+/gemini:adversarial-review --base main challenge whether this was the right caching and retry design
+/gemini:adversarial-review --background look for race conditions and question the chosen approach
 ```
 
-This command is read-only.
+This command is read-only. It does not fix code.
 
 ### `/gemini:rescue`
 
@@ -119,9 +130,12 @@ Use it when you want Gemini to:
 - investigate a bug
 - try a fix
 - continue a previous Gemini task
-- take a pass with a different model
+- take a faster or cheaper pass with a smaller model
 
-It supports `--background`, `--wait`, `--resume`, and `--fresh`.
+> [!NOTE]
+> Depending on the task and the model you choose these tasks might take a long time and it's generally recommended to force the task to be in the background or move the agent to the background.
+
+It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--resume` and `--fresh`, the plugin can offer to continue the latest rescue thread for this repo.
 
 Examples:
 
@@ -140,10 +154,12 @@ You can also just ask for a task to be delegated to Gemini:
 Ask Gemini to redesign the database connection to be more resilient.
 ```
 
-**Model aliases:**
+**Notes:**
 
-- `flash` maps to `gemini-3-flash`
-- `pro` maps to `gemini-3.1-pro`
+- if you do not pass `--model`, Gemini chooses its own defaults (currently Gemini 3 auto-select).
+- if you say `flash`, the plugin maps that to `gemini-3-flash`
+- if you say `pro`, the plugin maps that to `gemini-3.1-pro`
+- follow-up rescue requests can continue the latest Gemini task in the repo
 
 ### `/gemini:status`
 
@@ -156,10 +172,16 @@ Examples:
 /gemini:status task-abc123
 ```
 
+Use it to:
+
+- check progress on background work
+- see the latest completed job
+- confirm whether a task is still running
+
 ### `/gemini:result`
 
 Shows the final stored Gemini output for a finished job.
-When available, it also includes the Gemini session ID so you can resume that run directly with `gemini --resume <session-id>`.
+When available, it also includes the Gemini session ID so you can reopen that run directly in Gemini with `gemini --resume <session-id>`.
 
 Examples:
 
@@ -181,8 +203,8 @@ Examples:
 
 ### `/gemini:setup`
 
-Checks whether Gemini CLI is installed and authenticated.
-If Gemini CLI is missing and npm is available, it can offer to install it for you.
+Checks whether Gemini is installed and authenticated.
+If Gemini is missing and npm is available, it can offer to install Gemini for you.
 
 You can also use `/gemini:setup` to manage the optional review gate.
 
@@ -195,7 +217,8 @@ You can also use `/gemini:setup` to manage the optional review gate.
 
 When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted Gemini review based on Claude's response. If that review finds issues, the stop is blocked so Claude can address them first.
 
-> **Warning:** The review gate can create a long-running Claude/Gemini loop and may drain usage quickly. Only enable it when you plan to actively monitor the session.
+> [!WARNING]
+> The review gate can create a long-running Claude/Gemini loop and may drain usage limits quickly. Only enable it when you plan to actively monitor the session.
 
 ## Typical Flows
 
@@ -227,35 +250,58 @@ Then check in with:
 
 ## Gemini Integration
 
-The plugin wraps the [Gemini CLI](https://github.com/google-gemini/gemini-cli). It uses the global `gemini` binary installed in your environment.
+The Gemini plugin wraps the [Gemini CLI](https://github.com/google-gemini/gemini-cli). It uses the global `gemini` binary installed in your environment and applies the same configuration.
 
 ### Common Configurations
 
-Gemini CLI uses `~/.gemini/settings.json` for global configuration and `.gemini/settings.json` for project-level overrides.
+If you want to change the default model that gets used by the plugin, you can define that inside your user-level or project-level `settings.json`. For example to always use `gemini-3.1-pro` for a specific project you can add the following to a `.gemini/settings.json` file at the root of the directory you started Claude in:
+
+```json
+{
+  "model": "gemini-3.1-pro"
+}
+```
+
+Your configuration will be picked up based on:
+
+- user-level config in `~/.gemini/settings.json`
+- project-level overrides in `.gemini/settings.json`
+
+Check out the [Gemini CLI docs](https://geminicli.com/docs/) for more configuration options.
 
 ### Moving The Work Over To Gemini
 
-Delegated tasks can be directly resumed inside Gemini CLI by running `gemini --resume <session-id>` with the session ID from `/gemini:result` or `/gemini:status`.
+Delegated tasks and any [stop gate](#enabling-review-gate) run can also be directly resumed inside Gemini by running `gemini --resume` either with the specific session ID you received from running `/gemini:result` or `/gemini:status` or by selecting it from the list.
+
+This way you can review the Gemini work or continue the work there.
 
 ## FAQ
 
-### Do I need a separate Gemini account?
+### Do I need a separate Gemini account for this plugin?
 
-If you are already signed into Gemini CLI on this machine, that account works here too. This plugin uses your local Gemini CLI authentication.
+If you are already signed into Gemini on this machine, that account should work immediately here too. This plugin uses your local Gemini CLI authentication.
 
-If you have not used Gemini CLI yet, you will need to authenticate. Run `/gemini:setup` to check, and use `!gemini auth login` if needed.
+If you only use Claude Code today and have not used Gemini yet, you will also need to sign in to Gemini with a Google account or an API key. [Gemini CLI is free to use](https://ai.google.dev/pricing), and `gemini auth login` supports Google OAuth sign-in. Run `/gemini:setup` to check whether Gemini is ready, and use `!gemini auth login` if it is not.
 
-### Does the plugin use a separate runtime?
+### Does the plugin use a separate Gemini runtime?
 
-No. This plugin delegates through your local Gemini CLI on the same machine. That means:
+No. This plugin delegates through your local [Gemini CLI](https://github.com/google-gemini/gemini-cli) on the same machine.
+
+That means:
 
 - it uses the same Gemini install you would use directly
-- it uses the same authentication state
-- it uses the same repository checkout and environment
+- it uses the same local authentication state
+- it uses the same repository checkout and machine-local environment
 
-### Can I use my API key?
+### Will it use the same Gemini config I already have?
 
-Yes. Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` in your environment, or configure it in `~/.gemini/settings.json`.
+Yes. If you already use Gemini, the plugin picks up the same [configuration](#common-configurations).
+
+### Can I keep using my current API key setup?
+
+Yes. Because the plugin uses your local Gemini CLI, your existing sign-in method and config still apply.
+
+Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` in your environment, or configure it in `~/.gemini/settings.json`.
 
 ## License
 
