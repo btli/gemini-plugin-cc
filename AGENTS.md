@@ -8,10 +8,12 @@ Based on the architecture of [codex-plugin-cc](https://github.com/openai/codex-p
 
 ## Architecture
 
-- **No broker/app-server**: Unlike the codex plugin which uses JSON-RPC over Unix sockets, this plugin invokes `gemini` directly as a one-shot subprocess.
-- **Structured output**: Reviews request JSON via prompt engineering + `-o json` flag. No native schema enforcement.
-- **Background jobs**: Detached Node.js worker processes that spawn `gemini` and write results to state files.
+- **ACP protocol**: Communicates with Gemini CLI via ACP (Agent Communication Protocol) — JSON-RPC 2.0 over stdin/stdout. Spawns `gemini --acp` as a child process.
+- **No broker/app-server**: Unlike the codex plugin which uses a Codex app server, this plugin communicates directly with the Gemini subprocess.
+- **Structured output**: Reviews request JSON via prompt engineering. No native schema enforcement.
+- **Background jobs**: Detached Node.js worker processes with SIGTERM-based graceful cancellation and partial output preservation.
 - **Session management**: Gemini session IDs stored in job state, resumable with `--resume <session-id>`.
+- **Session timeouts**: All setup requests wrapped in 10-second timeouts to prevent hangs.
 
 ## Tech Stack
 
@@ -25,7 +27,10 @@ Based on the architecture of [codex-plugin-cc](https://github.com/openai/codex-p
 
 | File | Role |
 |---|---|
-| `plugins/gemini/scripts/lib/gemini.mjs` | Core Gemini CLI integration — availability checks, auth, subprocess spawning, output parsing |
+| `plugins/gemini/scripts/lib/gemini.mjs` | Core Gemini integration — task execution, review orchestration, shutdown handling |
+| `plugins/gemini/scripts/lib/acp-lifecycle.mjs` | ACP client lifecycle — spawning, session creation/resume, timeout handling, file access handlers |
+| `plugins/gemini/scripts/lib/acp-client.mjs` | Low-level JSON-RPC 2.0 client over stdin/stdout |
+| `plugins/gemini/scripts/lib/models.mjs` | Model aliases and default model configuration |
 | `plugins/gemini/scripts/gemini-companion.mjs` | Main CLI orchestrator — dispatches setup, review, task, status, result, cancel commands |
 | `plugins/gemini/scripts/lib/render.mjs` | Markdown output formatting for all commands |
 | `plugins/gemini/scripts/lib/state.mjs` | Persistent state management (jobs, config) |
@@ -79,5 +84,5 @@ node --test tests/*.test.mjs
 
 - **Add a new command**: Create `plugins/gemini/commands/<name>.md` with frontmatter, add handler in `gemini-companion.mjs`
 - **Change review prompts**: Edit `plugins/gemini/prompts/review.md` or `adversarial-review.md`
-- **Update model defaults**: Edit `MODEL_ALIASES` in `plugins/gemini/scripts/lib/gemini.mjs`
+- **Update model defaults**: Edit `DEFAULT_MODEL` and `MODEL_ALIASES` in `plugins/gemini/scripts/lib/models.mjs`
 - **Add a new skill**: Create `plugins/gemini/skills/<name>/SKILL.md` with frontmatter
