@@ -252,7 +252,8 @@ async function handleReviewWorker(cwd, argv) {
     prompt,
     model: options.model,
     workspaceRoot,
-    logFile: jobRecord?.logFile ?? null
+    logFile: jobRecord?.logFile ?? null,
+    jobId
   });
 
   const rendered = renderReviewResult(

@@ -315,13 +315,14 @@ export async function runGeminiReview(cwd, options = {}) {
     logFile,
     onProgress,
     env,
-    workspaceRoot
+    workspaceRoot,
+    jobId
   } = options;
 
   // Reviews are always read-only (write: false)
   const taskResult = await runGeminiTask(cwd, {
     prompt, model, write: false, logFile, onProgress, env, workspaceRoot,
-    timeoutMs
+    timeoutMs, jobId
   });
 
   if (!taskResult.ok) {

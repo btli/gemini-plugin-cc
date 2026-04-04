@@ -96,14 +96,23 @@ export function installDefaultHandlers(client, opts = {}) {
   if (write) {
     client.onServerRequest("fs/write_text_file", async (params) => {
       const filePath = resolveContainedPath(workspaceRoot, params.path);
-      // For writes, the file may not exist yet — check the parent directory instead
-      const parentDir = path.dirname(filePath);
+      // Check target file itself first — if it exists as a symlink pointing
+      // outside workspace, writeFile would follow it and escape the sandbox
       try {
-        await assertContainedRealpath(workspaceRoot, parentDir);
+        await assertContainedRealpath(workspaceRoot, filePath);
       } catch (err) {
-        // If parent doesn't exist (ENOENT), the logical path check from
-        // resolveContainedPath is sufficient since there's no symlink to follow
-        if (err.code !== "ENOENT") {
+        if (err.code === "ENOENT") {
+          // File doesn't exist yet — check the parent directory instead
+          const parentDir = path.dirname(filePath);
+          try {
+            await assertContainedRealpath(workspaceRoot, parentDir);
+          } catch (parentErr) {
+            if (parentErr.code !== "ENOENT") {
+              throw parentErr;
+            }
+            // Parent also doesn't exist — logical path check is sufficient
+          }
+        } else {
           throw err;
         }
       }
