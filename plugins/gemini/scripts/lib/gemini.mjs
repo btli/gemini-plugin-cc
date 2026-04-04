@@ -1,11 +1,19 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { spawn, spawnSync } from "node:child_process";
-import { binaryAvailable, runCommand } from "./process.mjs";
-import { readJsonFile } from "./fs.mjs";
+import { createSession, resumeSession, spawnAcpClient } from "./acp-lifecycle.mjs";
 import { resolveModel } from "./models.mjs";
+import { binaryAvailable } from "./process.mjs";
+import { readJsonFile } from "./fs.mjs";
+import { appendLogLine } from "./tracked-jobs.mjs";
+import { upsertJob } from "./state.mjs";
+
+// Backward-compat re-export: gemini-companion.mjs imports this name
 export { resolveModel as normalizeRequestedModel } from "./models.mjs";
+
+// ---------------------------------------------------------------------------
+// Sync helpers (unchanged)
+// ---------------------------------------------------------------------------
 
 export function getGeminiAvailability(cwd) {
   return binaryAvailable("gemini", ["--version"], { cwd });
@@ -51,157 +59,9 @@ export function getGeminiAuthStatus() {
   };
 }
 
-function buildGeminiArgs(options = {}) {
-  const args = [];
-
-  if (options.prompt) {
-    args.push("-p", options.prompt);
-  }
-
-  if (options.model) {
-    const model = resolveModel(options.model);
-    if (model) {
-      args.push("-m", model);
-    }
-  }
-
-  if (options.outputFormat) {
-    args.push("-o", options.outputFormat);
-  }
-
-  if (options.approvalMode) {
-    args.push("--approval-mode", options.approvalMode);
-  }
-
-  if (options.resume) {
-    args.push("--resume", options.resume);
-  }
-
-  if (options.yolo) {
-    args.push("-y");
-  }
-
-  if (options.sandbox === false) {
-    args.push("--no-sandbox");
-  }
-
-  if (options.disableExtensions) {
-    args.push("--no-extensions");
-  }
-
-  return args;
-}
-
-function cleanGeminiStderr(stderr) {
-  if (!stderr) {
-    return "";
-  }
-  return stderr
-    .split("\n")
-    .filter((line) => {
-      const trimmed = line.trim();
-      if (!trimmed) {
-        return false;
-      }
-      // Filter common noise
-      if (trimmed.startsWith("Keychain") || trimmed.startsWith("keychain")) {
-        return false;
-      }
-      if (trimmed.includes("Loading extensions")) {
-        return false;
-      }
-      if (trimmed.includes("ExperimentalWarning")) {
-        return false;
-      }
-      if (trimmed.startsWith("(node:")) {
-        return false;
-      }
-      return true;
-    })
-    .join("\n")
-    .trim();
-}
-
-export function runGeminiSync(cwd, options = {}) {
-  const args = buildGeminiArgs(options);
-  const timeoutMs = options.timeoutMs ?? 15 * 60 * 1000;
-
-  const result = spawnSync("gemini", args, {
-    cwd,
-    env: options.env ?? process.env,
-    encoding: "utf8",
-    timeout: timeoutMs,
-    stdio: ["pipe", "pipe", "pipe"],
-    input: options.stdinInput ?? undefined
-  });
-
-  if (result.error?.code === "ETIMEDOUT") {
-    return {
-      ok: false,
-      status: null,
-      stdout: "",
-      stderr: "",
-      timedOut: true,
-      error: `Gemini timed out after ${Math.round(timeoutMs / 1000)}s`
-    };
-  }
-
-  if (result.error?.code === "ENOENT") {
-    return {
-      ok: false,
-      status: null,
-      stdout: "",
-      stderr: "",
-      timedOut: false,
-      error: "gemini CLI not found. Install with: npm install -g @google/gemini-cli"
-    };
-  }
-
-  if (result.error) {
-    return {
-      ok: false,
-      status: null,
-      stdout: "",
-      stderr: "",
-      timedOut: false,
-      error: result.error.message
-    };
-  }
-
-  return {
-    ok: result.status === 0,
-    status: result.status,
-    stdout: result.stdout ?? "",
-    stderr: cleanGeminiStderr(result.stderr),
-    timedOut: false,
-    error: result.status !== 0 ? cleanGeminiStderr(result.stderr) || `exit ${result.status}` : null
-  };
-}
-
-export function parseJsonOutput(stdout) {
-  const text = String(stdout ?? "").trim();
-  if (!text) {
-    return { parsed: false, parseError: "Empty output", rawOutput: "" };
-  }
-
-  try {
-    const data = JSON.parse(text);
-    return {
-      parsed: true,
-      sessionId: data.session_id ?? null,
-      response: data.response ?? data.text ?? "",
-      stats: data.stats ?? null,
-      rawOutput: text
-    };
-  } catch {
-    // Gemini may output the response directly without JSON wrapper
-    return {
-      parsed: false,
-      parseError: "Output is not valid JSON",
-      rawOutput: text
-    };
-  }
-}
+// ---------------------------------------------------------------------------
+// Structured output parser (unchanged — 3-strategy: direct → fence → brace)
+// ---------------------------------------------------------------------------
 
 export function parseStructuredOutput(rawText) {
   const text = String(rawText ?? "").trim();
@@ -247,6 +107,10 @@ export function parseStructuredOutput(rawText) {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Schema loader (unchanged)
+// ---------------------------------------------------------------------------
+
 export function readOutputSchema(schemaPath) {
   try {
     return readJsonFile(schemaPath);
@@ -255,99 +119,9 @@ export function readOutputSchema(schemaPath) {
   }
 }
 
-export function runGeminiTask(cwd, options = {}) {
-  const {
-    prompt,
-    model,
-    write = true,
-    resume,
-    timeoutMs,
-    env
-  } = options;
-
-  const geminiOptions = {
-    prompt,
-    model,
-    outputFormat: "json",
-    approvalMode: write ? "yolo" : "plan",
-    resume: resume ?? undefined,
-    disableExtensions: options.disableExtensions ?? false,
-    timeoutMs,
-    env
-  };
-
-  const result = runGeminiSync(cwd, geminiOptions);
-  if (!result.ok) {
-    return {
-      ok: false,
-      rawOutput: result.stderr || result.error,
-      sessionId: null,
-      failureMessage: result.error
-    };
-  }
-
-  const parsed = parseJsonOutput(result.stdout);
-  if (parsed.parsed) {
-    return {
-      ok: true,
-      rawOutput: parsed.response,
-      sessionId: parsed.sessionId,
-      stats: parsed.stats,
-      failureMessage: null
-    };
-  }
-
-  // Fallback: treat stdout as raw text response
-  return {
-    ok: true,
-    rawOutput: result.stdout.trim(),
-    sessionId: null,
-    stats: null,
-    failureMessage: null
-  };
-}
-
-export function runGeminiReview(cwd, options = {}) {
-  const {
-    prompt,
-    model,
-    timeoutMs,
-    env
-  } = options;
-
-  const geminiOptions = {
-    prompt,
-    model,
-    outputFormat: "json",
-    approvalMode: "plan", // Reviews are always read-only
-    disableExtensions: true, // Keep reviews fast
-    timeoutMs,
-    env
-  };
-
-  const result = runGeminiSync(cwd, geminiOptions);
-  if (!result.ok) {
-    return {
-      ok: false,
-      parsed: null,
-      parseError: result.error,
-      rawOutput: result.stderr || "",
-      sessionId: null,
-      reasoningSummary: null
-    };
-  }
-
-  const jsonResult = parseJsonOutput(result.stdout);
-  const responseText = jsonResult.parsed ? jsonResult.response : result.stdout.trim();
-  const structuredResult = parseStructuredOutput(responseText);
-
-  return {
-    ok: true,
-    ...structuredResult,
-    sessionId: jsonResult.sessionId ?? null,
-    reasoningSummary: null
-  };
-}
+// ---------------------------------------------------------------------------
+// Session query (unchanged)
+// ---------------------------------------------------------------------------
 
 export function findLatestTaskSession(workspaceRoot, listJobs) {
   const jobs = listJobs(workspaceRoot);
@@ -358,22 +132,234 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
   return taskJobs[0] ?? null;
 }
 
-export function spawnGeminiBackground(cwd, options = {}) {
-  const args = buildGeminiArgs(options);
-  const logFd = options.logFile ? fs.openSync(options.logFile, "a") : "ignore";
+// ---------------------------------------------------------------------------
+// Async ACP-based task execution
+// ---------------------------------------------------------------------------
 
-  const child = spawn("gemini", args, {
-    cwd,
-    env: options.env ?? process.env,
-    detached: true,
-    stdio: ["pipe", logFd, logFd]
-  });
+/**
+ * Run a Gemini task via ACP.
+ *
+ * @param {string} cwd - working directory
+ * @param {object} options
+ * @param {string}  options.prompt
+ * @param {string}  [options.model]
+ * @param {boolean} [options.write=true]
+ * @param {string}  [options.resume]       - existing sessionId to resume
+ * @param {string}  [options.logFile]
+ * @param {Function} [options.onProgress]
+ * @param {object}  [options.env]
+ * @param {string}  [options.jobId]
+ * @param {string}  [options.workspaceRoot]
+ * @returns {Promise<{ok: boolean, rawOutput: string, sessionId: string|null, stopReason: string|null, failureMessage: string|null}>}
+ */
+export async function runGeminiTask(cwd, options = {}) {
+  const {
+    prompt,
+    model,
+    write = true,
+    resume,
+    logFile,
+    onProgress,
+    env,
+    jobId,
+    workspaceRoot
+  } = options;
 
-  child.unref();
+  const resolvedModel = resolveModel(model);
+  const modeId = write ? "default" : "plan";
 
-  if (typeof logFd === "number") {
-    fs.closeSync(logFd);
+  let client, sessionId;
+  try {
+    if (resume) {
+      ({ client, sessionId } = await resumeSession(resume, {
+        cwd, env, workspaceRoot: workspaceRoot ?? cwd, write, logFile
+      }));
+    } else {
+      ({ client, sessionId } = await createSession({
+        cwd, env, modeId, model: resolvedModel,
+        workspaceRoot: workspaceRoot ?? cwd, write, logFile
+      }));
+    }
+  } catch (err) {
+    return {
+      ok: false,
+      rawOutput: "",
+      sessionId: null,
+      stopReason: null,
+      failureMessage: err.message
+    };
   }
 
-  return child;
+  // Persist sessionId immediately for graceful cancel support
+  if (jobId && workspaceRoot) {
+    try {
+      upsertJob(workspaceRoot, { id: jobId, sessionId });
+    } catch {
+      // non-fatal — state write may fail in edge cases
+    }
+  }
+
+  const chunks = [];
+
+  client.setNotificationHandler((message) => {
+    if (message.method !== "session/update") {
+      return;
+    }
+    const params = message.params;
+    if (params?.sessionId !== sessionId) {
+      return;
+    }
+    const update = params?.update;
+    if (!update) {
+      return;
+    }
+
+    if (update.sessionUpdate === "agent_message_chunk" && update.content?.text) {
+      chunks.push(update.content.text);
+      appendLogLine(logFile, update.content.text);
+      onProgress?.({ message: update.content.text, phase: "streaming" });
+    } else if (update.sessionUpdate === "tool_call") {
+      const toolName = update.name ?? "tool";
+      appendLogLine(logFile, `[tool_call] ${toolName}`);
+      onProgress?.({ message: `Running: ${toolName}`, phase: "tool_call" });
+    }
+  });
+
+  let result;
+  try {
+    result = await client.request("session/prompt", {
+      sessionId,
+      prompt: [{ type: "text", text: prompt }]
+    });
+  } catch (err) {
+    await client.close().catch(() => {});
+    const msg = err?.message ?? String(err);
+
+    if (/429|RESOURCE_EXHAUSTED|capacity|rate.limit/i.test(msg)) {
+      return {
+        ok: false,
+        rawOutput: "",
+        sessionId,
+        stopReason: null,
+        failureMessage: `Model "${model ?? "default"}" hit rate limits after retries.`
+      };
+    }
+    if (/malformed function call/i.test(msg)) {
+      return {
+        ok: false,
+        rawOutput: "",
+        sessionId,
+        stopReason: null,
+        failureMessage: `Model "${model ?? "default"}" returned malformed output.`
+      };
+    }
+    return {
+      ok: false,
+      rawOutput: "",
+      sessionId,
+      stopReason: null,
+      failureMessage: msg
+    };
+  }
+
+  await client.close().catch(() => {});
+  return {
+    ok: true,
+    rawOutput: chunks.join(""),
+    sessionId,
+    stopReason: result?.stopReason ?? "unknown",
+    failureMessage: null
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Async ACP-based review execution
+// ---------------------------------------------------------------------------
+
+/**
+ * Run a Gemini review via ACP (read-only mode).
+ *
+ * @param {string} cwd - working directory
+ * @param {object} options
+ * @param {string}  options.prompt
+ * @param {string}  [options.model]
+ * @param {number}  [options.timeoutMs]
+ * @param {string}  [options.logFile]
+ * @param {Function} [options.onProgress]
+ * @param {object}  [options.env]
+ * @param {string}  [options.workspaceRoot]
+ * @returns {Promise<{ok: boolean, parsed: object|null, parseError: string|null, rawOutput: string, sessionId: string|null, reasoningSummary: string|null}>}
+ */
+export async function runGeminiReview(cwd, options = {}) {
+  const {
+    prompt,
+    model,
+    timeoutMs,
+    logFile,
+    onProgress,
+    env,
+    workspaceRoot
+  } = options;
+
+  // Reviews are always read-only (write: false)
+  const taskResult = await runGeminiTask(cwd, {
+    prompt,
+    model,
+    write: false,
+    logFile,
+    onProgress,
+    env,
+    workspaceRoot
+  });
+
+  if (!taskResult.ok) {
+    return {
+      ok: false,
+      parsed: null,
+      parseError: taskResult.failureMessage,
+      rawOutput: taskResult.rawOutput,
+      sessionId: taskResult.sessionId,
+      reasoningSummary: null
+    };
+  }
+
+  const structuredResult = parseStructuredOutput(taskResult.rawOutput);
+
+  return {
+    ok: true,
+    ...structuredResult,
+    sessionId: taskResult.sessionId,
+    reasoningSummary: null
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Session interruption
+// ---------------------------------------------------------------------------
+
+/**
+ * Interrupt / cancel a running ACP session.
+ * Spawns a fresh short-lived ACP client, sends the cancel notification,
+ * waits briefly for it to take effect, then closes.
+ *
+ * @param {string} sessionId - the session to cancel
+ * @param {object} [opts]
+ * @param {string} [opts.cwd]
+ * @param {object} [opts.env]
+ * @param {string} [opts.workspaceRoot]
+ * @returns {Promise<void>}
+ */
+export async function interruptSession(sessionId, opts = {}) {
+  const client = await spawnAcpClient({
+    cwd: opts.cwd,
+    env: opts.env,
+    workspaceRoot: opts.workspaceRoot
+  });
+
+  try {
+    client.notify("session/cancel", { sessionId });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+  } finally {
+    await client.close().catch(() => {});
+  }
 }
