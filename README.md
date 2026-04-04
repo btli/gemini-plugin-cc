@@ -156,7 +156,7 @@ Ask Gemini to redesign the database connection to be more resilient.
 
 **Notes:**
 
-- if you do not pass `--model`, Gemini chooses its own defaults (currently Gemini 3 auto-select).
+- if you do not pass `--model`, the plugin defaults to `gemini-3.1-pro`.
 - if you say `flash`, the plugin maps that to `gemini-3-flash`
 - if you say `pro`, the plugin maps that to `gemini-3.1-pro`
 - follow-up rescue requests can continue the latest Gemini task in the repo
@@ -192,7 +192,7 @@ Examples:
 
 ### `/gemini:cancel`
 
-Cancels an active background Gemini job.
+Gracefully cancels an active background Gemini job. The plugin sends a cancel signal to the running ACP session, waits for the worker to persist any partial output, and then confirms cancellation. If the worker does not exit cleanly within 3 seconds, it is force-terminated.
 
 Examples:
 
@@ -248,6 +248,32 @@ Then check in with:
 /gemini:result
 ```
 
+## Architecture
+
+This plugin mirrors the design of the official [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc), adapted for Google's Gemini ecosystem.
+
+| | Codex plugin | Gemini plugin |
+|---|---|---|
+| **CLI** | [`@openai/codex`](https://developers.openai.com/codex/cli/) | [`@google/gemini-cli`](https://github.com/google-gemini/gemini-cli) |
+| **Protocol** | JSON-RPC via Codex app server | JSON-RPC via ACP (Agent Communication Protocol) |
+| **Session model** | Managed by app server broker | Direct subprocess — no broker |
+| **Cancellation** | JSON-RPC cancel to app server | SIGTERM to worker, worker sends `session/cancel` on its own ACP connection |
+| **Config format** | TOML (`.codex/config.toml`) | JSON (`.gemini/settings.json`) |
+| **Auth** | ChatGPT account or OpenAI API key | Google account or Gemini API key |
+| **Model aliases** | `spark` &rarr; `gpt-5.3-codex-spark` | `flash` &rarr; `gemini-3-flash`, `pro` &rarr; `gemini-3.1-pro` |
+
+Both plugins share the same user-facing command surface (`review`, `adversarial-review`, `rescue`, `status`, `result`, `cancel`, `setup`) and the same background job system with foreground/background execution, session resume, and a stop-hook review gate.
+
+### How it works
+
+The plugin spawns `gemini --acp` as a child process and communicates over stdin/stdout using the [ACP protocol](https://github.com/google-gemini/gemini-cli) (JSON-RPC 2.0). Each task gets its own ACP session with:
+
+- **Session setup timeouts** — all setup requests (`session/new`, `set_mode`, `set_model`, `session/load`) are wrapped in a 10-second timeout to prevent hangs if Gemini stalls during initialization.
+- **Graceful cancellation** — background workers install a SIGTERM handler that sends `session/cancel` on the active ACP connection before closing. This preserves partial output instead of force-killing the transport. The cancel command sends SIGTERM to the worker first, waits up to 3 seconds for clean shutdown, and falls back to process tree termination.
+- **Partial output preservation** — if a task fails (timeout, rate limit, crash), any streamed output accumulated before the failure is returned instead of being discarded.
+- **Sandboxed file access** — Gemini's file read/write requests are confined to the workspace directory with symlink escape prevention. Files over 5 MB are rejected to prevent memory exhaustion.
+- **Buffered logging** — streaming chunks are accumulated and flushed on line boundaries to reduce per-token sync I/O overhead.
+
 ## Gemini Integration
 
 The Gemini plugin wraps the [Gemini CLI](https://github.com/google-gemini/gemini-cli). It uses the global `gemini` binary installed in your environment and applies the same configuration.
@@ -285,13 +311,14 @@ If you only use Claude Code today and have not used Gemini yet, you will also ne
 
 ### Does the plugin use a separate Gemini runtime?
 
-No. This plugin delegates through your local [Gemini CLI](https://github.com/google-gemini/gemini-cli) on the same machine.
+No. This plugin spawns your local [Gemini CLI](https://github.com/google-gemini/gemini-cli) as a subprocess using the ACP (Agent Communication Protocol) flag. There is no separate broker or app server — unlike the Codex plugin which relies on a Codex app server, the Gemini plugin communicates directly with the Gemini process over stdin/stdout.
 
 That means:
 
 - it uses the same Gemini install you would use directly
 - it uses the same local authentication state
 - it uses the same repository checkout and machine-local environment
+- sessions created by the plugin can be resumed directly with `gemini --resume`
 
 ### Will it use the same Gemini config I already have?
 

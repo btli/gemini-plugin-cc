@@ -6,7 +6,7 @@ This is a Claude Code plugin that wraps Google's Gemini CLI for code reviews and
 
 ## Architecture
 
-This plugin invokes the `gemini` binary as a subprocess from within Claude Code. It does NOT use any app server or persistent connection — each review or task spawns a fresh `gemini` process with `-o json` for structured output.
+This plugin communicates with the `gemini` binary via ACP (Agent Communication Protocol) — a JSON-RPC 2.0 protocol over stdin/stdout. It spawns `gemini --acp` as a child process, creates a session, and exchanges structured messages. There is no broker or app server.
 
 The plugin provides these Claude Code slash commands:
 - `/gemini:review` — standard code review
@@ -36,20 +36,20 @@ The plugin maps short names to full model identifiers:
 - `flash` → `gemini-3-flash`
 - `flash-lite` → `gemini-2.5-flash-lite`
 
-These are defined in `plugins/gemini/scripts/lib/gemini.mjs` in the `MODEL_ALIASES` map.
+These are defined in `plugins/gemini/scripts/lib/models.mjs` in the `MODEL_ALIASES` map. The default model (when no `--model` flag is passed) is `gemini-3.1-pro`.
 
 ## How Reviews Work
 
-Since there's no native review RPC (unlike Codex), all reviews are prompt-based:
+Reviews use ACP in read-only mode (`session/set_mode` with `modeId: "plan"`):
 1. Collect git diff context (`lib/git.mjs`)
 2. Build a review prompt from templates in `plugins/gemini/prompts/`
 3. Embed the JSON schema from `plugins/gemini/schemas/review-output.schema.json`
-4. Run `gemini -p "<prompt>" -o json --approval-mode plan`
+4. Send the prompt via `session/prompt` over ACP
 5. Parse the structured JSON from the response
 
 ## Testing
 
-Tests use a fake `gemini` binary (`tests/fake-gemini-fixture.mjs`) that simulates `-o json` and `-o stream-json` output formats. No real API calls are made during tests.
+Tests use a fake `gemini` binary (`tests/fake-gemini-fixture.mjs`) that simulates the ACP protocol. No real API calls are made during tests.
 
 ```bash
 node --test tests/*.test.mjs
@@ -58,6 +58,6 @@ node --test tests/*.test.mjs
 ## Common Modifications
 
 - **Review prompts**: `plugins/gemini/prompts/review.md` and `adversarial-review.md`
-- **Model defaults**: `MODEL_ALIASES` in `plugins/gemini/scripts/lib/gemini.mjs`
+- **Model defaults**: `DEFAULT_MODEL` and `MODEL_ALIASES` in `plugins/gemini/scripts/lib/models.mjs`
 - **Output formatting**: `plugins/gemini/scripts/lib/render.mjs`
 - **New commands**: Add `.md` in `plugins/gemini/commands/` + handler in `gemini-companion.mjs`

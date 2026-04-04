@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createSession, resumeSession, withTimeout } from "./acp-lifecycle.mjs";
-import { resolveModel, suggestAlternatives } from "./models.mjs";
+import { DEFAULT_MODEL, resolveModel, suggestAlternatives } from "./models.mjs";
 import { binaryAvailable } from "./process.mjs";
 import { readJsonFile } from "./fs.mjs";
 import { appendLogLine, createBufferedLogWriter } from "./tracked-jobs.mjs";
@@ -217,7 +217,7 @@ export async function runGeminiTask(cwd, options = {}) {
     timeoutMs
   } = options;
 
-  const resolvedModel = resolveModel(model);
+  const resolvedModel = resolveModel(model) ?? DEFAULT_MODEL;
   const modeId = write ? "default" : "plan";
   const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
 
