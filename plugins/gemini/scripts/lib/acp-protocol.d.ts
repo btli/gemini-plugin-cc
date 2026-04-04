@@ -90,3 +90,55 @@ export interface WriteTextFileParams {
   path: string;
   content: string;
 }
+
+// --- Client classes ---
+
+export type NotificationHandler = (message: JsonRpcNotification) => void;
+export type ServerRequestHandler = (params: unknown) => Promise<unknown>;
+
+export interface JsonRpcClient {
+  pending: Map<number, { resolve: (value: unknown) => void; reject: (error: Error) => void; method: string }>;
+  nextId: number;
+  notificationHandler: NotificationHandler | null;
+  serverRequestHandlers: Map<string, ServerRequestHandler>;
+  closed: boolean;
+  exitError: Error | null;
+  exitPromise: Promise<void>;
+
+  setNotificationHandler(handler: NotificationHandler | null): void;
+  onServerRequest(method: string, handler: ServerRequestHandler): void;
+  request(method: string, params?: unknown): Promise<unknown>;
+  notify(method: string, params?: unknown): void;
+  handleLine(line: string): void;
+  handleServerRequest(message: JsonRpcRequest): void;
+  handleExit(error?: Error | null): void;
+  sendMessage(message: unknown): void;
+}
+
+export interface GeminiAcpClient extends JsonRpcClient {
+  readonly pid: number;
+  readonly exited: boolean;
+  stderr: string;
+  close(opts?: { phase1Ms?: number; phase2Ms?: number }): Promise<void>;
+}
+
+// --- Lifecycle functions ---
+
+export interface SpawnAcpClientOptions {
+  binary?: string;
+  cwd?: string;
+  env?: NodeJS.ProcessEnv;
+  workspaceRoot?: string;
+  write?: boolean;
+  logFile?: string;
+}
+
+export interface CreateSessionOptions extends SpawnAcpClientOptions {
+  modeId?: string;
+  model?: string;
+}
+
+export interface CreateSessionResult {
+  client: GeminiAcpClient;
+  sessionId: string;
+}
