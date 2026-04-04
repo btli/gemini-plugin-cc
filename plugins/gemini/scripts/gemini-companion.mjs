@@ -23,7 +23,7 @@ import {
   parseStructuredOutput,
   readOutputSchema,
   findLatestTaskSession,
-  interruptSession
+  installShutdownHandler
 } from "./lib/gemini.mjs";
 import {
   buildStatusSnapshot,
@@ -34,7 +34,7 @@ import {
   readStoredJob,
   sortJobsNewestFirst
 } from "./lib/job-control.mjs";
-import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
+import { binaryAvailable, isProcessAlive, terminateProcessTree } from "./lib/process.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import {
   renderSetupReport,
@@ -232,6 +232,8 @@ function executeReviewBackground(cwd, target, kind, options = {}) {
 }
 
 async function handleReviewWorker(cwd, argv) {
+  installShutdownHandler();
+
   const { options } = parseArgs(argv, {
     valueOptions: new Set(["job-id", "kind", "cwd", "base", "model", "focus"]),
     booleanOptions: new Set([])
@@ -415,6 +417,8 @@ async function executeTask(cwd, prompt, options = {}) {
 }
 
 async function handleTaskWorker(cwd, argv) {
+  installShutdownHandler();
+
   const { options } = parseArgs(argv, {
     valueOptions: new Set(["job-id", "cwd", "prompt", "model", "resume"]),
     booleanOptions: new Set(["read-only"])
@@ -519,13 +523,23 @@ async function handleCancel(cwd, argv) {
   const reference = positionals[0] ?? null;
   const { workspaceRoot, job } = resolveCancelableJob(cwd, reference);
 
-  if (job.sessionId) {
-    await interruptSession(job.sessionId, { cwd });
-  }
-
   if (job.pid) {
     try {
-      terminateProcessTree(job.pid);
+      // Send SIGTERM to just the worker PID (not the process group) so the
+      // worker's installShutdownHandler can gracefully cancel the ACP session
+      // before the transport dies. On Windows, fall through to terminateProcessTree.
+      if (process.platform !== "win32") {
+        process.kill(job.pid, "SIGTERM");
+        // Give the worker up to 3s to cancel the session, persist results, and exit
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline && isProcessAlive(job.pid)) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+      // Fall back to tree kill if the worker is still alive (or on Windows)
+      if (isProcessAlive(job.pid)) {
+        terminateProcessTree(job.pid);
+      }
     } catch {
       // Process may already be gone.
     }
