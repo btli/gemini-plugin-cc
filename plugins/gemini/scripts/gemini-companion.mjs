@@ -18,12 +18,12 @@ import {
 import {
   getGeminiAvailability,
   getGeminiAuthStatus,
-  normalizeRequestedModel,
   runGeminiReview,
   runGeminiTask,
   parseStructuredOutput,
   readOutputSchema,
-  findLatestTaskSession
+  findLatestTaskSession,
+  interruptSession
 } from "./lib/gemini.mjs";
 import {
   buildStatusSnapshot,
@@ -150,11 +150,11 @@ function buildReviewPrompt(cwd, target, kind, focusText) {
   };
 }
 
-function executeReviewForeground(cwd, target, kind, options = {}) {
+async function executeReviewForeground(cwd, target, kind, options = {}) {
   const { prompt, targetLabel } = buildReviewPrompt(cwd, target, kind, options.focusText);
   const reviewLabel = kind === "adversarial-review" ? "Adversarial Review" : "Review";
 
-  const result = runGeminiReview(cwd, {
+  const result = await runGeminiReview(cwd, {
     prompt,
     model: options.model,
     timeoutMs: options.timeoutMs,
@@ -231,7 +231,7 @@ function executeReviewBackground(cwd, target, kind, options = {}) {
   process.stdout.write(`Started background ${kind}: job ${jobId}\nCheck progress: /gemini:status ${jobId}\nGet result: /gemini:result ${jobId}\n`);
 }
 
-function handleReviewWorker(cwd, argv) {
+async function handleReviewWorker(cwd, argv) {
   const { options } = parseArgs(argv, {
     valueOptions: new Set(["job-id", "kind", "cwd", "base", "model", "focus"]),
     booleanOptions: new Set([])
@@ -243,12 +243,16 @@ function handleReviewWorker(cwd, argv) {
   const workspaceRoot = resolveWorkspaceRoot(workerCwd);
   const target = options.base ? { mode: "branch", base: options.base } : resolveReviewTarget(workerCwd);
 
+  const jobRecord = listJobs(workspaceRoot).find((j) => j.id === jobId);
+
   const { prompt, targetLabel } = buildReviewPrompt(workerCwd, target, kind, options.focus);
   const reviewLabel = kind === "adversarial-review" ? "Adversarial Review" : "Review";
 
-  const result = runGeminiReview(workerCwd, {
+  const result = await runGeminiReview(workerCwd, {
     prompt,
-    model: options.model
+    model: options.model,
+    workspaceRoot,
+    logFile: jobRecord?.logFile ?? null
   });
 
   const rendered = renderReviewResult(
@@ -274,7 +278,7 @@ function handleReviewWorker(cwd, argv) {
   });
 }
 
-function handleReview(cwd, argv, kind = "review") {
+async function handleReview(cwd, argv, kind = "review") {
   const { options, positionals } = parseArgs(argv, {
     valueOptions: new Set(["base", "scope", "model", "timeout-ms"]),
     booleanOptions: new Set(["wait", "background", "json"])
@@ -291,7 +295,7 @@ function handleReview(cwd, argv, kind = "review") {
   }
 
   if (options.wait) {
-    executeReviewForeground(cwd, target, kind, { model, focusText, timeoutMs });
+    await executeReviewForeground(cwd, target, kind, { model, focusText, timeoutMs });
     return;
   }
 
@@ -301,7 +305,7 @@ function handleReview(cwd, argv, kind = "review") {
   const isSmall = fileCount <= 2 && (!diffStats || diffStats.length < 60);
 
   if (isSmall) {
-    executeReviewForeground(cwd, target, kind, { model, focusText, timeoutMs });
+    await executeReviewForeground(cwd, target, kind, { model, focusText, timeoutMs });
   } else {
     executeReviewBackground(cwd, target, kind, { model, focusText });
   }
@@ -311,7 +315,7 @@ function handleReview(cwd, argv, kind = "review") {
 // task
 // ---------------------------------------------------------------------------
 
-function handleTask(cwd, argv) {
+async function handleTask(cwd, argv) {
   const { options, positionals } = parseArgs(argv, {
     valueOptions: new Set(["model", "effort", "timeout-ms"]),
     booleanOptions: new Set(["background", "wait", "write", "read-only", "resume-last", "json"])
@@ -326,7 +330,7 @@ function handleTask(cwd, argv) {
     const workspaceRoot = resolveWorkspaceRoot(cwd);
     const lastJob = findLatestTaskSession(workspaceRoot, listJobs);
     if (lastJob?.sessionId) {
-      return executeTask(cwd, prompt || "Continue where you left off.", {
+      return await executeTask(cwd, prompt || "Continue where you left off.", {
         model, write, resume: lastJob.sessionId, background: isBackground
       });
     }
@@ -339,10 +343,10 @@ function handleTask(cwd, argv) {
     return;
   }
 
-  executeTask(cwd, prompt, { model, write, background: isBackground });
+  await executeTask(cwd, prompt, { model, write, background: isBackground });
 }
 
-function executeTask(cwd, prompt, options = {}) {
+async function executeTask(cwd, prompt, options = {}) {
   const { model, write = true, resume, background = false } = options;
   const workspaceRoot = resolveWorkspaceRoot(cwd);
 
@@ -399,7 +403,7 @@ function executeTask(cwd, prompt, options = {}) {
   }
 
   // Foreground
-  const result = runGeminiTask(cwd, { prompt, model, write, resume });
+  const result = await runGeminiTask(cwd, { prompt, model, write, resume });
   const output = renderTaskResult(result);
 
   if (options.json) {
@@ -409,7 +413,7 @@ function executeTask(cwd, prompt, options = {}) {
   }
 }
 
-function handleTaskWorker(cwd, argv) {
+async function handleTaskWorker(cwd, argv) {
   const { options } = parseArgs(argv, {
     valueOptions: new Set(["job-id", "cwd", "prompt", "model", "resume"]),
     booleanOptions: new Set(["read-only"])
@@ -420,11 +424,16 @@ function handleTaskWorker(cwd, argv) {
   const workspaceRoot = resolveWorkspaceRoot(workerCwd);
   const write = !options["read-only"];
 
-  const result = runGeminiTask(workerCwd, {
+  const jobRecord = listJobs(workspaceRoot).find((j) => j.id === jobId);
+
+  const result = await runGeminiTask(workerCwd, {
     prompt: options.prompt,
     model: options.model,
     write,
-    resume: options.resume
+    resume: options.resume,
+    jobId,
+    workspaceRoot,
+    logFile: jobRecord?.logFile ?? null
   });
 
   const rendered = renderTaskResult(result);
@@ -501,13 +510,17 @@ function handleResult(cwd, argv) {
 // cancel
 // ---------------------------------------------------------------------------
 
-function handleCancel(cwd, argv) {
+async function handleCancel(cwd, argv) {
   const { options, positionals } = parseArgs(argv, {
     booleanOptions: new Set(["json"])
   });
 
   const reference = positionals[0] ?? null;
   const { workspaceRoot, job } = resolveCancelableJob(cwd, reference);
+
+  if (job.sessionId) {
+    await interruptSession(job.sessionId, { cwd });
+  }
 
   if (job.pid) {
     try {
@@ -538,7 +551,7 @@ function handleCancel(cwd, argv) {
 // main dispatch
 // ---------------------------------------------------------------------------
 
-function main() {
+async function main() {
   const cwd = process.env.CLAUDE_PROJECT_DIR || process.cwd();
   const [command, ...argv] = process.argv.slice(2);
 
@@ -547,19 +560,19 @@ function main() {
       handleSetup(cwd, argv);
       break;
     case "review":
-      handleReview(cwd, argv, "review");
+      await handleReview(cwd, argv, "review");
       break;
     case "adversarial-review":
-      handleReview(cwd, argv, "adversarial-review");
+      await handleReview(cwd, argv, "adversarial-review");
       break;
     case "task":
-      handleTask(cwd, argv);
+      await handleTask(cwd, argv);
       break;
     case "task-worker":
-      handleTaskWorker(cwd, argv);
+      await handleTaskWorker(cwd, argv);
       break;
     case "review-worker":
-      handleReviewWorker(cwd, argv);
+      await handleReviewWorker(cwd, argv);
       break;
     case "status":
       handleStatus(cwd, argv);
@@ -568,7 +581,7 @@ function main() {
       handleResult(cwd, argv);
       break;
     case "cancel":
-      handleCancel(cwd, argv);
+      await handleCancel(cwd, argv);
       break;
     default:
       process.stderr.write(`Unknown command: ${command ?? "(none)"}\nUsage: gemini-companion <setup|review|adversarial-review|task|status|result|cancel> [options]\n`);
@@ -576,4 +589,7 @@ function main() {
   }
 }
 
-main();
+main().catch((err) => {
+  process.stderr.write(`${err.message}\n`);
+  process.exitCode = 1;
+});

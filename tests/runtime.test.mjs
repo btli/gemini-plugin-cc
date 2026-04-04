@@ -13,7 +13,7 @@ describe("runtime integration", () => {
     tmpDir = createTempDir("runtime-test-");
     binDir = createTempDir("fake-bin-");
     initGitRepo(tmpDir);
-    installFakeGemini(binDir);
+    installFakeGemini(binDir, "task-ok");
     fakeEnv = createFakeGeminiEnv(binDir);
   });
 
@@ -55,5 +55,35 @@ describe("runtime integration", () => {
     const result = runCompanion(["task"], { cwd: tmpDir, env: fakeEnv });
     assert.equal(result.status, 1);
     assert.ok(result.stderr.includes("No task prompt"));
+  });
+
+  it("review --wait completes with fake gemini", () => {
+    const reviewBinDir = createTempDir("fake-bin-review-");
+    installFakeGemini(reviewBinDir, "review-ok");
+    const reviewEnv = createFakeGeminiEnv(reviewBinDir);
+    try {
+      const result = runCompanion(["review", "--wait"], { cwd: tmpDir, env: reviewEnv, timeout: 30_000 });
+      assert.equal(result.status, 0);
+      assert.ok(result.stdout.length > 0, "stdout should be non-empty");
+      assert.ok(
+        result.stdout.includes("Review") || result.stdout.includes("review") || result.stdout.includes("Gemini"),
+        `expected review-related output, got: ${result.stdout.slice(0, 200)}`
+      );
+    } finally {
+      removeFakeGemini(reviewBinDir);
+    }
+  });
+
+  it("task --wait completes with fake gemini", () => {
+    const taskBinDir = createTempDir("fake-bin-task-");
+    installFakeGemini(taskBinDir, "task-ok");
+    const taskEnv = createFakeGeminiEnv(taskBinDir);
+    try {
+      const result = runCompanion(["task", "--wait", "test task"], { cwd: tmpDir, env: taskEnv, timeout: 30_000 });
+      assert.equal(result.status, 0);
+      assert.ok(result.stdout.length > 0, "stdout should be non-empty");
+    } finally {
+      removeFakeGemini(taskBinDir);
+    }
   });
 });
