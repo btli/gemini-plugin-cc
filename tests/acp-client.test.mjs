@@ -1,4 +1,4 @@
-import { describe, it } from "node:test";
+import { describe, it, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -7,8 +7,11 @@ import os from "node:os";
 
 import { GeminiAcpClient } from "../plugins/gemini/scripts/lib/acp-client.mjs";
 
+const tempDirs = [];
 function makeTempDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), "acp-client-test-"));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acp-client-test-"));
+  tempDirs.push(dir);
+  return dir;
 }
 
 function writeScript(dir, name, src) {
@@ -25,6 +28,13 @@ function spawnScript(dir, name, src) {
 }
 
 describe("GeminiAcpClient", () => {
+  afterEach(() => {
+    for (const dir of tempDirs) {
+      try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* ignore */ }
+    }
+    tempDirs.length = 0;
+  });
+
   it("resolves requests by id", async () => {
     const dir = makeTempDir();
     const proc = spawnScript(dir, "echo-server", `

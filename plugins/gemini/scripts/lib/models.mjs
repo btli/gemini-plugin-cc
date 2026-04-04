@@ -1,3 +1,13 @@
+export const MODELS = Object.freeze({
+  FLASH_2_5: "gemini-2.5-flash",
+  PRO_2_5: "gemini-2.5-pro",
+  FLASH_LITE_2_5: "gemini-2.5-flash-lite",
+  FLASH_3: "gemini-3-flash",
+  PRO_3: "gemini-3.1-pro"
+});
+
+export const DEFAULT_MODEL = MODELS.FLASH_2_5;
+
 export const MODEL_ALIASES = new Map([
   ["flash", "gemini-2.5-flash"],
   ["pro", "gemini-2.5-pro"],

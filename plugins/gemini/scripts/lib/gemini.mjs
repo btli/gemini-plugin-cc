@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createSession, resumeSession, spawnAcpClient } from "./acp-lifecycle.mjs";
-import { resolveModel } from "./models.mjs";
+import { resolveModel, suggestAlternatives } from "./models.mjs";
 import { binaryAvailable } from "./process.mjs";
 import { readJsonFile } from "./fs.mjs";
 import { appendLogLine } from "./tracked-jobs.mjs";
@@ -259,21 +259,27 @@ export async function runGeminiTask(cwd, options = {}) {
     const msg = err?.message ?? String(err);
 
     if (/429|RESOURCE_EXHAUSTED|capacity|rate.limit/i.test(msg)) {
+      const modelLabel = model ?? "default";
+      const alternatives = suggestAlternatives(resolvedModel);
+      const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
       return {
         ok: false,
         rawOutput: "",
         sessionId,
         stopReason: null,
-        failureMessage: `Model "${model ?? "default"}" hit rate limits after retries.`
+        failureMessage: `Model "${modelLabel}" hit rate limits.${suggestion}`
       };
     }
     if (/malformed function call/i.test(msg)) {
+      const modelLabel = model ?? "default";
+      const alternatives = suggestAlternatives(resolvedModel);
+      const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
       return {
         ok: false,
         rawOutput: "",
         sessionId,
         stopReason: null,
-        failureMessage: `Model "${model ?? "default"}" returned malformed output.`
+        failureMessage: `Model "${modelLabel}" returned malformed output.${suggestion}`
       };
     }
     return {

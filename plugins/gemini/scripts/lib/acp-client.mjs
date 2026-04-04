@@ -8,7 +8,7 @@ export class JsonRpcClient {
     this.serverRequestHandlers = new Map();
     this.closed = false;
     this.exitError = null;
-    this.lineBuffer = "";
+    this._exitResolved = false;
 
     this.exitPromise = new Promise((resolve) => {
       this._resolveExit = resolve;
@@ -42,17 +42,6 @@ export class JsonRpcClient {
       return;
     }
     this.sendMessage({ jsonrpc: "2.0", method, params });
-  }
-
-  handleChunk(chunk) {
-    this.lineBuffer += chunk;
-    let newlineIndex = this.lineBuffer.indexOf("\n");
-    while (newlineIndex !== -1) {
-      const line = this.lineBuffer.slice(0, newlineIndex);
-      this.lineBuffer = this.lineBuffer.slice(newlineIndex + 1);
-      this.handleLine(line);
-      newlineIndex = this.lineBuffer.indexOf("\n");
-    }
   }
 
   handleLine(line) {
@@ -123,9 +112,10 @@ export class JsonRpcClient {
   }
 
   handleExit(error) {
-    if (this.closed) {
+    if (this._exitResolved) {
       return;
     }
+    this._exitResolved = true;
 
     this.closed = true;
     this.exitError = error ?? null;
@@ -240,11 +230,14 @@ export class GeminiAcpClient extends JsonRpcClient {
       });
     });
 
-    // Reject any remaining pending
-    for (const pending of this.pending.values()) {
-      pending.reject(new Error("ACP client closed."));
+    // Only reject remaining pendings if handleExit hasn't already done it
+    if (this.pending.size > 0) {
+      for (const pending of this.pending.values()) {
+        pending.reject(new Error("ACP client closed."));
+      }
+      this.pending.clear();
     }
-    this.pending.clear();
+    this._exitResolved = true;
     this._resolveExit(undefined);
   }
 
