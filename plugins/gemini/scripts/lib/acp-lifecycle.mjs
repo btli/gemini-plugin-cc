@@ -162,6 +162,8 @@ export async function spawnAcpClient(opts = {}) {
       initTimeout,
     ]);
     clearTimeout(initTimer);
+    // Send initialized notification (required by Gemini ACP before session operations)
+    client.notify("initialized", {});
   } catch (err) {
     clearTimeout(initTimer);
     await client.close().catch(() => {});
@@ -178,7 +180,7 @@ export async function createSession(opts = {}) {
   const client = await spawnAcpClient(opts);
   try {
     const cwd = opts.cwd ?? process.cwd();
-    const { sessionId } = await client.request("session/new", { cwd });
+    const { sessionId } = await client.request("session/new", { cwd, mcpServers: [] });
     const setup = [client.request("session/set_mode", { sessionId, modeId: opts.modeId ?? "default" })];
     if (opts.model) {
       setup.push(client.request("session/set_model", { sessionId, modelId: opts.model }));
