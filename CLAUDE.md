@@ -12,7 +12,7 @@ replaces the Codex app server with direct ACP (Agent Communication Protocol) com
 - **No broker/app-server**: Direct subprocess — no persistent server or broker process
 - **Structured output**: Prompt-based (no native schema enforcement)
 - **Sessions**: ACP session IDs stored in job state, resumed with `--resume`
-- **Default model**: `gemini-3.1-pro` (configurable via `--model` flag or `.gemini/settings.json`)
+- **Default model**: `gemini-3.1-pro-preview` (configurable via `--model` flag or `.gemini/settings.json`)
 
 ## Development
 

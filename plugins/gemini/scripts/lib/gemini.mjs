@@ -172,6 +172,45 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
 // Async ACP-based task execution
 // ---------------------------------------------------------------------------
 
+/**
+ * Extract text strings from a content array.
+ * Handles both plain strings and MCP-style objects ({ type: "text", text: "..." }).
+ */
+export function extractTextFromContent(content) {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((c) => c && typeof c.text === "string")
+    .map((c) => c.text)
+    .join("");
+}
+
+/**
+ * Extract text content from a session/prompt result object.
+ * Gemini ACP may return the full response in the result instead of streaming
+ * it via agent_message_chunk notifications (especially in plan/read-only mode).
+ */
+export function extractResultText(result) {
+  if (!result || typeof result !== "object") return "";
+
+  // Direct text field
+  if (typeof result.text === "string" && result.text) return result.text;
+
+  // Content array (MCP-style: [{ type: "text", text: "..." }])
+  if (Array.isArray(result.content)) {
+    return extractTextFromContent(result.content);
+  }
+
+  // Messages array (chat-style: [{ role: "...", content: [...] }])
+  if (Array.isArray(result.messages)) {
+    return result.messages
+      .map((m) => extractTextFromContent(m.content))
+      .join("");
+  }
+
+  return "";
+}
+
 function buildModelFailureResult(sessionId, model, resolvedModel, message, partialOutput = "") {
   const alternatives = suggestAlternatives(resolvedModel);
   const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
@@ -326,9 +365,16 @@ export async function runGeminiTask(cwd, options = {}) {
   const stopReason = result?.stopReason ?? "unknown";
   const isSuccess = stopReason === "end_turn";
 
+  // Prefer streamed chunks; fall back to extracting text from the prompt result
+  // (Gemini ACP may return full content in the response instead of streaming)
+  let rawOutput = chunks.join("");
+  if (!rawOutput) {
+    rawOutput = extractResultText(result);
+  }
+
   return {
     ok: isSuccess,
-    rawOutput: chunks.join(""),
+    rawOutput,
     sessionId,
     stopReason,
     failureMessage: isSuccess ? null : `Gemini turn ended with stop reason: ${stopReason}`

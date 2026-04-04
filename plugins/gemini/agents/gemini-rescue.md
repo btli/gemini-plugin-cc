@@ -30,7 +30,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" task <arguments>
 4. If the user says `--resume` or follow-up phrases ("continue", "keep going", "pick up where you left off"), use `--resume-last`.
 5. If the user says `--fresh`, start a new session without resuming.
 6. Strip routing controls (`--effort`, `--model`) from the task text and pass them as flags instead.
-7. Model aliases: `flash` maps to `gemini-3-flash`, `pro` maps to `gemini-3.1-pro`.
+7. Model aliases: `flash` maps to `gemini-3-flash-preview`, `pro` maps to `gemini-3.1-pro-preview`, `auto` maps to `auto-gemini-3`.
 
 ### Output rules
 

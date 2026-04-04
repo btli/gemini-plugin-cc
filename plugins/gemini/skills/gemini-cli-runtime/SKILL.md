@@ -20,7 +20,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" task "<raw arguments>"
 - Do NOT call `setup`, `review`, `adversarial-review`, `status`, `result`, or `cancel` from within rescue.
 - Strip `--background` and `--wait` from the task text and pass them as flags.
 - Leave `--model` unset unless the user explicitly requests a specific model.
-- Model aliases: `flash` → `gemini-3-flash`, `pro` → `gemini-3.1-pro`.
+- Model aliases: `flash` → `gemini-3-flash-preview`, `pro` → `gemini-3.1-pro-preview`, `auto` → `auto-gemini-3`.
 - Default to write-capable runs by adding `--write` unless the user asks for read-only.
 - `--resume` triggers `task --resume-last`.
 - `--fresh` starts a clean `task` run.

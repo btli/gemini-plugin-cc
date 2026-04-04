@@ -61,8 +61,10 @@ plugins/gemini/
 
 ## Model Aliases
 
-- `pro` → `gemini-3.1-pro`
-- `flash` → `gemini-3-flash`
+- `auto` → `auto-gemini-3` (let Gemini choose between pro and flash)
+- `auto-2.5` → `auto-gemini-2.5`
+- `pro` → `gemini-3.1-pro-preview`
+- `flash` → `gemini-3-flash-preview`
 - `flash-lite` → `gemini-2.5-flash-lite`
 
 ## Development Conventions

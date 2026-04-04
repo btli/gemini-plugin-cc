@@ -156,9 +156,10 @@ Ask Gemini to redesign the database connection to be more resilient.
 
 **Notes:**
 
-- if you do not pass `--model`, the plugin defaults to `gemini-3.1-pro`.
-- if you say `flash`, the plugin maps that to `gemini-3-flash`
-- if you say `pro`, the plugin maps that to `gemini-3.1-pro`
+- if you do not pass `--model`, the plugin defaults to `gemini-3.1-pro-preview`.
+- if you say `flash`, the plugin maps that to `gemini-3-flash-preview`
+- if you say `pro`, the plugin maps that to `gemini-3.1-pro-preview`
+- if you say `auto`, the plugin maps that to `auto-gemini-3` (lets Gemini choose the best model)
 - follow-up rescue requests can continue the latest Gemini task in the repo
 
 ### `/gemini:status`
@@ -260,7 +261,7 @@ This plugin mirrors the design of the official [Codex plugin for Claude Code](ht
 | **Cancellation** | JSON-RPC cancel to app server | SIGTERM to worker, worker sends `session/cancel` on its own ACP connection |
 | **Config format** | TOML (`.codex/config.toml`) | JSON (`.gemini/settings.json`) |
 | **Auth** | ChatGPT account or OpenAI API key | Google account or Gemini API key |
-| **Model aliases** | `spark` &rarr; `gpt-5.3-codex-spark` | `flash` &rarr; `gemini-3-flash`, `pro` &rarr; `gemini-3.1-pro` |
+| **Model aliases** | `spark` &rarr; `gpt-5.3-codex-spark` | `flash` &rarr; `gemini-3-flash-preview`, `pro` &rarr; `gemini-3.1-pro-preview` |
 
 Both plugins share the same user-facing command surface (`review`, `adversarial-review`, `rescue`, `status`, `result`, `cancel`, `setup`) and the same background job system with foreground/background execution, session resume, and a stop-hook review gate.
 
@@ -280,11 +281,11 @@ The Gemini plugin wraps the [Gemini CLI](https://github.com/google-gemini/gemini
 
 ### Common Configurations
 
-If you want to change the default model that gets used by the plugin, you can define that inside your user-level or project-level `settings.json`. For example to always use `gemini-3.1-pro` for a specific project you can add the following to a `.gemini/settings.json` file at the root of the directory you started Claude in:
+If you want to change the default model that gets used by the plugin, you can define that inside your user-level or project-level `settings.json`. For example to always use `gemini-2.5-pro` for a specific project you can add the following to a `.gemini/settings.json` file at the root of the directory you started Claude in:
 
 ```json
 {
-  "model": "gemini-3.1-pro"
+  "model": "gemini-2.5-pro"
 }
 ```
 
