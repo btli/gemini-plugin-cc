@@ -3,16 +3,11 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 
 import { GeminiAcpClient } from "../plugins/gemini/scripts/lib/acp-client.mjs";
+import { createTempDir } from "./helpers.mjs";
 
 const tempDirs = [];
-function makeTempDir() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "acp-client-test-"));
-  tempDirs.push(dir);
-  return dir;
-}
 
 function writeScript(dir, name, src) {
   const p = path.join(dir, `${name}.mjs`);
@@ -36,7 +31,8 @@ describe("GeminiAcpClient", () => {
   });
 
   it("resolves requests by id", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "echo-server", `
 import readline from "node:readline";
 const rl = readline.createInterface({ input: process.stdin });
@@ -54,7 +50,8 @@ rl.on("line", (line) => {
   });
 
   it("rejects pending requests when process exits", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "crash-server", `process.exit(1);`);
     const client = new GeminiAcpClient(proc);
     await assert.rejects(
@@ -64,7 +61,8 @@ rl.on("line", (line) => {
   });
 
   it("dispatches notifications to handler", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "notify-server", `
 import readline from "node:readline";
 const rl = readline.createInterface({ input: process.stdin });
@@ -86,7 +84,8 @@ rl.on("line", (line) => {
   });
 
   it("handles server-to-client requests", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "permission-server", `
 import readline from "node:readline";
 const rl = readline.createInterface({ input: process.stdin });
@@ -112,7 +111,8 @@ rl.on("line", (line) => {
   });
 
   it("rejects unknown server requests with -32601", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "unknown-req-server", `
 import readline from "node:readline";
 const rl = readline.createInterface({ input: process.stdin });
@@ -142,7 +142,8 @@ rl.on("line", (line) => {
   });
 
   it("notify sends fire-and-forget message", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "notify-receiver", `
 import readline from "node:readline";
 const rl = readline.createInterface({ input: process.stdin });
@@ -165,7 +166,8 @@ rl.on("line", (line) => {
   });
 
   it("exposes pid and exited properties", async () => {
-    const dir = makeTempDir();
+    const dir = createTempDir("acp-client-test-");
+    tempDirs.push(dir);
     const proc = spawnScript(dir, "simple-server", `
 import readline from "node:readline";
 const rl = readline.createInterface({ input: process.stdin });

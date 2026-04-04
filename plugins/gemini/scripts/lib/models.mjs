@@ -9,11 +9,11 @@ export const MODELS = Object.freeze({
 export const DEFAULT_MODEL = MODELS.FLASH_2_5;
 
 export const MODEL_ALIASES = new Map([
-  ["flash", "gemini-2.5-flash"],
-  ["pro", "gemini-2.5-pro"],
-  ["flash-lite", "gemini-2.5-flash-lite"],
-  ["flash-3", "gemini-3-flash"],
-  ["pro-3", "gemini-3.1-pro"]
+  ["flash", MODELS.FLASH_2_5],
+  ["pro", MODELS.PRO_2_5],
+  ["flash-lite", MODELS.FLASH_LITE_2_5],
+  ["flash-3", MODELS.FLASH_3],
+  ["pro-3", MODELS.PRO_3]
 ]);
 
 export function resolveModel(input) {

@@ -132,6 +132,8 @@ export class JsonRpcClient {
   }
 }
 
+const MAX_STDERR = 64 * 1024;
+
 export class GeminiAcpClient extends JsonRpcClient {
   constructor(proc) {
     super();
@@ -142,7 +144,9 @@ export class GeminiAcpClient extends JsonRpcClient {
     if (proc.stderr) {
       proc.stderr.setEncoding("utf8");
       proc.stderr.on("data", (chunk) => {
-        this.stderr += chunk;
+        if (this.stderr.length < MAX_STDERR) {
+          this.stderr += chunk.slice(0, MAX_STDERR - this.stderr.length);
+        }
       });
     }
 
@@ -195,7 +199,10 @@ export class GeminiAcpClient extends JsonRpcClient {
     }
 
     await new Promise((resolve) => {
+      let finished = false;
       const finish = () => {
+        if (finished) return;
+        finished = true;
         try {
           this.proc.stdout.destroy();
         } catch {

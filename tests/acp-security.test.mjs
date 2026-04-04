@@ -2,7 +2,6 @@ import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 
 import {
   spawnAcpClient,
@@ -16,10 +15,7 @@ import {
   removeFakeGemini,
   readFakeState,
 } from "./fake-gemini-fixture.mjs";
-
-function makeTempDir(prefix = "acp-security-test-") {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
+import { createTempDir } from "./helpers.mjs";
 
 describe("write-in-readonly fixture", () => {
   let binDir;
@@ -28,8 +24,8 @@ describe("write-in-readonly fixture", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir("acp-sec-write-");
-    workspaceDir = makeTempDir("workspace-write-");
+    binDir = createTempDir("acp-sec-write-");
+    workspaceDir = createTempDir("workspace-write-");
     installFakeGemini(binDir, "write-in-readonly");
     env = createFakeGeminiEnv(binDir);
   });
@@ -85,8 +81,8 @@ describe("path-escape fixture", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir("acp-sec-escape-");
-    workspaceDir = makeTempDir("workspace-escape-");
+    binDir = createTempDir("acp-sec-escape-");
+    workspaceDir = createTempDir("workspace-escape-");
     installFakeGemini(binDir, "path-escape");
     env = createFakeGeminiEnv(binDir);
   });
@@ -141,8 +137,8 @@ describe("permission fixture", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir("acp-sec-perm-");
-    workspaceDir = makeTempDir("workspace-perm-");
+    binDir = createTempDir("acp-sec-perm-");
+    workspaceDir = createTempDir("workspace-perm-");
     installFakeGemini(binDir, "permission");
     env = createFakeGeminiEnv(binDir);
   });

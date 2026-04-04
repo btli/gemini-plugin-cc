@@ -9,11 +9,8 @@ import { appendLogLine } from "./tracked-jobs.mjs";
 import { upsertJob } from "./state.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
-// Backward-compat re-export: gemini-companion.mjs imports this name
-export { resolveModel as normalizeRequestedModel } from "./models.mjs";
-
 // ---------------------------------------------------------------------------
-// Sync helpers (unchanged)
+// Sync helpers
 // ---------------------------------------------------------------------------
 
 export function getGeminiAvailability(cwd) {
@@ -61,7 +58,7 @@ export function getGeminiAuthStatus() {
 }
 
 // ---------------------------------------------------------------------------
-// Structured output parser (unchanged — 3-strategy: direct → fence → brace)
+// Structured output parser (3-strategy: direct → fence → brace)
 // ---------------------------------------------------------------------------
 
 export function parseStructuredOutput(rawText) {
@@ -108,10 +105,6 @@ export function parseStructuredOutput(rawText) {
   };
 }
 
-// ---------------------------------------------------------------------------
-// Schema loader (unchanged)
-// ---------------------------------------------------------------------------
-
 export function readOutputSchema(schemaPath) {
   try {
     return readJsonFile(schemaPath);
@@ -119,10 +112,6 @@ export function readOutputSchema(schemaPath) {
     return null;
   }
 }
-
-// ---------------------------------------------------------------------------
-// Session query (unchanged)
-// ---------------------------------------------------------------------------
 
 export function findLatestTaskSession(workspaceRoot, listJobs) {
   const jobs = listJobs(workspaceRoot);
@@ -136,6 +125,18 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
 // ---------------------------------------------------------------------------
 // Async ACP-based task execution
 // ---------------------------------------------------------------------------
+
+function buildModelFailureResult(sessionId, model, resolvedModel, message) {
+  const alternatives = suggestAlternatives(resolvedModel);
+  const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
+  return {
+    ok: false,
+    rawOutput: "",
+    sessionId,
+    stopReason: null,
+    failureMessage: `${message}${suggestion}`
+  };
+}
 
 const DEFAULT_PROMPT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes, same as old spawnSync default
 
@@ -259,28 +260,10 @@ export async function runGeminiTask(cwd, options = {}) {
     const msg = err?.message ?? String(err);
 
     if (/429|RESOURCE_EXHAUSTED|capacity|rate.limit/i.test(msg)) {
-      const modelLabel = model ?? "default";
-      const alternatives = suggestAlternatives(resolvedModel);
-      const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
-      return {
-        ok: false,
-        rawOutput: "",
-        sessionId,
-        stopReason: null,
-        failureMessage: `Model "${modelLabel}" hit rate limits.${suggestion}`
-      };
+      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" hit rate limits.`);
     }
     if (/malformed function call/i.test(msg)) {
-      const modelLabel = model ?? "default";
-      const alternatives = suggestAlternatives(resolvedModel);
-      const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
-      return {
-        ok: false,
-        rawOutput: "",
-        sessionId,
-        stopReason: null,
-        failureMessage: `Model "${modelLabel}" returned malformed output.${suggestion}`
-      };
+      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" returned malformed output.`);
     }
     return {
       ok: false,
@@ -331,15 +314,8 @@ export async function runGeminiReview(cwd, options = {}) {
   } = options;
 
   // Reviews are always read-only (write: false)
-  const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
   const taskResult = await runGeminiTask(cwd, {
-    prompt,
-    model,
-    write: false,
-    logFile,
-    onProgress,
-    env,
-    workspaceRoot: effectiveWorkspaceRoot,
+    prompt, model, write: false, logFile, onProgress, env, workspaceRoot,
     timeoutMs
   });
 

@@ -1,8 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import fs from "node:fs";
 import path from "node:path";
-import os from "node:os";
 
 import {
   detectAcpFlag,
@@ -13,45 +11,8 @@ import {
   resumeSession,
   isAlive,
 } from "../plugins/gemini/scripts/lib/acp-lifecycle.mjs";
-
-function makeTempDir(prefix = "acp-lifecycle-test-") {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
-}
-
-function installMinimalFake(binDir) {
-  fs.mkdirSync(binDir, { recursive: true });
-  const script = path.join(binDir, "gemini");
-  fs.writeFileSync(
-    script,
-    `#!/usr/bin/env node
-const readline = require("node:readline");
-const args = process.argv.slice(2);
-if (args.includes("--version")) { process.stdout.write("0.36.0\\n"); process.exit(0); }
-if (!args.includes("--acp")) { process.exit(1); }
-const rl = readline.createInterface({ input: process.stdin });
-rl.on("line", (line) => {
-  const msg = JSON.parse(line);
-  const send = (r) => process.stdout.write(JSON.stringify(r) + "\\n");
-  switch(msg.method) {
-    case "initialize": send({id:msg.id, result:{protocolVersion:1}}); break;
-    case "session/new": send({id:msg.id, result:{sessionId:"ses_1"}}); break;
-    case "session/load": send({id:msg.id, result:{sessionId:msg.params.sessionId}}); break;
-    case "session/set_mode": case "session/set_model": send({id:msg.id, result:{}}); break;
-    default: send({id:msg.id, result:{}}); break;
-  }
-});
-`,
-    { mode: 0o755 }
-  );
-}
-
-function makeEnv(binDir) {
-  return {
-    PATH: `${binDir}:${process.env.PATH}`,
-    HOME: os.tmpdir(),
-    GEMINI_API_KEY: "fake",
-  };
-}
+import { createTempDir } from "./helpers.mjs";
+import { installFakeGemini, createFakeGeminiEnv, removeFakeGemini } from "./fake-gemini-fixture.mjs";
 
 describe("detectAcpFlag", () => {
   let binDir;
@@ -59,9 +20,13 @@ describe("detectAcpFlag", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir();
-    installMinimalFake(binDir);
-    env = makeEnv(binDir);
+    binDir = createTempDir("acp-lifecycle-test-");
+    installFakeGemini(binDir, "task-ok");
+    env = createFakeGeminiEnv(binDir);
+  });
+
+  afterEach(() => {
+    removeFakeGemini(binDir);
   });
 
   it("returns --acp for >= 0.33.0", () => {
@@ -76,9 +41,13 @@ describe("spawnAcpClient", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir();
-    installMinimalFake(binDir);
-    env = makeEnv(binDir);
+    binDir = createTempDir("acp-lifecycle-test-");
+    installFakeGemini(binDir, "task-ok");
+    env = createFakeGeminiEnv(binDir);
+  });
+
+  afterEach(() => {
+    removeFakeGemini(binDir);
   });
 
   it("connects and completes initialize handshake", async () => {
@@ -99,9 +68,13 @@ describe("createSession", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir();
-    installMinimalFake(binDir);
-    env = makeEnv(binDir);
+    binDir = createTempDir("acp-lifecycle-test-");
+    installFakeGemini(binDir, "task-ok");
+    env = createFakeGeminiEnv(binDir);
+  });
+
+  afterEach(() => {
+    removeFakeGemini(binDir);
   });
 
   it("returns a non-empty sessionId", async () => {
@@ -110,7 +83,6 @@ describe("createSession", () => {
       env,
     });
     assert.ok(sessionId);
-    assert.equal(sessionId, "ses_1");
     await client.close();
   });
 });
@@ -121,9 +93,13 @@ describe("resumeSession", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir();
-    installMinimalFake(binDir);
-    env = makeEnv(binDir);
+    binDir = createTempDir("acp-lifecycle-test-");
+    installFakeGemini(binDir, "task-ok");
+    env = createFakeGeminiEnv(binDir);
+  });
+
+  afterEach(() => {
+    removeFakeGemini(binDir);
   });
 
   it("resumes an existing session", async () => {
@@ -142,9 +118,13 @@ describe("isAlive", () => {
 
   beforeEach(() => {
     clearFlagCache();
-    binDir = makeTempDir();
-    installMinimalFake(binDir);
-    env = makeEnv(binDir);
+    binDir = createTempDir("acp-lifecycle-test-");
+    installFakeGemini(binDir, "task-ok");
+    env = createFakeGeminiEnv(binDir);
+  });
+
+  afterEach(() => {
+    removeFakeGemini(binDir);
   });
 
   it("returns true for live client, false after close", async () => {
@@ -162,7 +142,7 @@ describe("resolveContainedPath", () => {
   let workspace;
 
   beforeEach(() => {
-    workspace = makeTempDir("workspace-");
+    workspace = createTempDir("workspace-");
   });
 
   it("resolves relative paths within workspace", () => {

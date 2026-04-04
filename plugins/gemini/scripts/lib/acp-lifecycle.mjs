@@ -146,14 +146,10 @@ export async function spawnAcpClient(opts = {}) {
     installDefaultHandlers(client, { workspaceRoot, write, logFile });
   }
 
-  const timeout = new Promise((_, reject) => {
-    const t = setTimeout(() => {
-      reject(new Error("ACP initialize handshake timed out after 10s."));
-    }, 10_000);
-    // Allow the process to exit without waiting for the timer
-    if (t.unref) {
-      t.unref();
-    }
+  let initTimer;
+  const initTimeout = new Promise((_, reject) => {
+    initTimer = setTimeout(() => reject(new Error("ACP initialize timed out after 10s.")), 10_000);
+    initTimer.unref?.();
   });
 
   try {
@@ -163,9 +159,11 @@ export async function spawnAcpClient(opts = {}) {
         clientInfo: { name: "gemini-companion", version: "1.0.0" },
         clientCapabilities: {},
       }),
-      timeout,
+      initTimeout,
     ]);
+    clearTimeout(initTimer);
   } catch (err) {
+    clearTimeout(initTimer);
     await client.close().catch(() => {});
     throw err;
   }
@@ -181,16 +179,11 @@ export async function createSession(opts = {}) {
   try {
     const cwd = opts.cwd ?? process.cwd();
     const { sessionId } = await client.request("session/new", { cwd });
-    await client.request("session/set_mode", {
-      sessionId,
-      modeId: opts.modeId ?? "default",
-    });
+    const setup = [client.request("session/set_mode", { sessionId, modeId: opts.modeId ?? "default" })];
     if (opts.model) {
-      await client.request("session/set_model", {
-        sessionId,
-        modelId: opts.model,
-      });
+      setup.push(client.request("session/set_model", { sessionId, modelId: opts.model }));
     }
+    await Promise.all(setup);
     return { client, sessionId };
   } catch (err) {
     await client.close().catch(() => {});
@@ -228,14 +221,3 @@ export function isAlive(client) {
   }
 }
 
-/**
- * Convenience wrapper: spawn an ACP client, run fn(client), then close.
- */
-export async function withAcpClient(cwd, fn, opts = {}) {
-  const client = await spawnAcpClient({ ...opts, cwd });
-  try {
-    return await fn(client);
-  } finally {
-    await client.close();
-  }
-}

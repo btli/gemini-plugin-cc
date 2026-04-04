@@ -18,7 +18,6 @@ import {
 import {
   getGeminiAvailability,
   getGeminiAuthStatus,
-  normalizeRequestedModel,
   runGeminiReview,
   runGeminiTask,
   parseStructuredOutput,
