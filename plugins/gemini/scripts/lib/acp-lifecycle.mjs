@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, writeFile, realpath } from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { GeminiAcpClient } from "./acp-client.mjs";
@@ -63,6 +63,23 @@ export function resolveContainedPath(workspaceRoot, requestedPath) {
 }
 
 /**
+ * Resolve a file path's symlinks and verify the real path is still within the workspace.
+ * Throws if the resolved symlink target escapes the workspace root.
+ *
+ * @param {string} workspaceRoot - the workspace root directory
+ * @param {string} filePath - the already-resolved logical path to check
+ * @returns {Promise<string>} the real (symlink-resolved) path
+ */
+async function assertContainedRealpath(workspaceRoot, filePath) {
+  const realFilePath = await realpath(filePath);
+  const normalizedRoot = path.resolve(workspaceRoot) + path.sep;
+  if (!realFilePath.startsWith(normalizedRoot) && realFilePath !== path.resolve(workspaceRoot)) {
+    throw new Error(`Path resolves outside workspace via symlink.`);
+  }
+  return realFilePath;
+}
+
+/**
  * Register default ACP tool handlers on the client for filesystem and permission operations.
  */
 export function installDefaultHandlers(client, opts = {}) {
@@ -70,14 +87,26 @@ export function installDefaultHandlers(client, opts = {}) {
 
   client.onServerRequest("fs/read_text_file", async (params) => {
     const filePath = resolveContainedPath(workspaceRoot, params.path);
-    appendLogLine(logFile, `fs/read_text_file: ${filePath}`);
-    const content = await readFile(filePath, "utf8");
+    const realFilePath = await assertContainedRealpath(workspaceRoot, filePath);
+    appendLogLine(logFile, `fs/read_text_file: ${realFilePath}`);
+    const content = await readFile(realFilePath, "utf8");
     return { content };
   });
 
   if (write) {
     client.onServerRequest("fs/write_text_file", async (params) => {
       const filePath = resolveContainedPath(workspaceRoot, params.path);
+      // For writes, the file may not exist yet — check the parent directory instead
+      const parentDir = path.dirname(filePath);
+      try {
+        await assertContainedRealpath(workspaceRoot, parentDir);
+      } catch (err) {
+        // If parent doesn't exist (ENOENT), the logical path check from
+        // resolveContainedPath is sufficient since there's no symlink to follow
+        if (err.code !== "ENOENT") {
+          throw err;
+        }
+      }
       appendLogLine(logFile, `fs/write_text_file: ${filePath}`);
       await writeFile(filePath, params.content, "utf8");
       return {};

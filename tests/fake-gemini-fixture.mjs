@@ -93,6 +93,35 @@ function sendError(id, code, message) {
 const state = loadState();
 state.calls = state.calls || [];
 
+// --- ACP notification helpers ---
+function sendSessionChunk(text) {
+  const sid = state.sessionId || 'fake-session';
+  send({
+    method: 'session/update',
+    params: {
+      sessionId: sid,
+      update: {
+        sessionUpdate: 'agent_message_chunk',
+        content: { type: 'text', text: text }
+      }
+    }
+  });
+}
+
+function sendSessionToolCall(toolName) {
+  const sid = state.sessionId || 'fake-session';
+  send({
+    method: 'session/update',
+    params: {
+      sessionId: sid,
+      update: {
+        sessionUpdate: 'tool_call',
+        name: toolName
+      }
+    }
+  });
+}
+
 // --- Prompt handler ---
 function handlePrompt(id, params) {
   state.calls.push({ method: 'session/prompt', params });
@@ -127,34 +156,26 @@ function handlePrompt(id, params) {
   }
 
   if (BEHAVIOR === 'write-in-readonly') {
-    sendNotification('session/update', {
-      type: 'tool_call',
-      tool: 'fs/write_text_file',
-      params: { path: '/tmp/test.txt', content: 'hello' }
-    });
+    sendSessionToolCall('fs/write_text_file');
     sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
     return;
   }
 
   if (BEHAVIOR === 'path-escape') {
-    sendNotification('session/update', {
-      type: 'tool_call',
-      tool: 'fs/read_text_file',
-      params: { path: '../../etc/passwd' }
-    });
+    sendSessionToolCall('fs/read_text_file');
     sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
     return;
   }
 
   // review-ok or session-load
   if (BEHAVIOR === 'review-ok' || BEHAVIOR === 'session-load') {
-    sendNotification('session/update', { type: 'chunk', text: REVIEW_JSON });
+    sendSessionChunk(REVIEW_JSON);
     sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
     return;
   }
 
   // Default: task-ok
-  sendNotification('session/update', { type: 'chunk', text: 'Task complete.' });
+  sendSessionChunk('Task complete.');
   sendResult(id, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
 }
 
@@ -230,7 +251,7 @@ rl.on('line', (line) => {
           const pendingId = state._pendingPromptId;
           delete state._pendingPromptId;
           saveState(state);
-          sendNotification('session/update', { type: 'chunk', text: 'Task complete.' });
+          sendSessionChunk('Task complete.');
           sendResult(pendingId, { stopReason: 'end_turn', sessionId: state.sessionId || 'fake-session' });
         } else {
           sendError(id, -32601, 'Method not found: ' + method);
