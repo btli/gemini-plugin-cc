@@ -4,23 +4,7 @@ import path from "node:path";
 import { spawn, spawnSync } from "node:child_process";
 import { binaryAvailable, runCommand } from "./process.mjs";
 import { readJsonFile } from "./fs.mjs";
-
-const MODEL_ALIASES = new Map([
-  ["flash", "gemini-3-flash"],
-  ["pro", "gemini-3.1-pro"],
-  ["flash-lite", "gemini-2.5-flash-lite"]
-]);
-
-export function normalizeRequestedModel(model) {
-  if (model == null) {
-    return null;
-  }
-  const normalized = String(model).trim();
-  if (!normalized) {
-    return null;
-  }
-  return MODEL_ALIASES.get(normalized.toLowerCase()) ?? normalized;
-}
+export { resolveModel as normalizeRequestedModel } from "./models.mjs";
 
 export function getGeminiAvailability(cwd) {
   return binaryAvailable("gemini", ["--version"], { cwd });
