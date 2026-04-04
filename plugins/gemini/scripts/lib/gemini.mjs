@@ -1,13 +1,59 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createSession, resumeSession, spawnAcpClient } from "./acp-lifecycle.mjs";
+import { createSession, resumeSession, withTimeout } from "./acp-lifecycle.mjs";
 import { resolveModel, suggestAlternatives } from "./models.mjs";
 import { binaryAvailable } from "./process.mjs";
 import { readJsonFile } from "./fs.mjs";
-import { appendLogLine } from "./tracked-jobs.mjs";
+import { appendLogLine, createBufferedLogWriter } from "./tracked-jobs.mjs";
 import { upsertJob } from "./state.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
+
+// ---------------------------------------------------------------------------
+// Module-level active task tracking (for SIGTERM-based cancellation)
+// ---------------------------------------------------------------------------
+
+let _activeTask = null;
+
+/**
+ * Install a SIGTERM/SIGINT handler that gracefully cancels the active ACP session.
+ * Call this in background worker processes so that `handleCancel` (which sends
+ * SIGTERM to the worker PID) triggers a clean session/cancel on the live
+ * connection instead of requiring a separate ACP client.
+ *
+ * When a task is active, the handler sends session/cancel and closes the client.
+ * Closing the client rejects the pending session/prompt promise, which lets
+ * runGeminiTask flow through its normal catch path — preserving partial output
+ * and allowing the worker to persist results before exiting naturally.
+ */
+export function installShutdownHandler() {
+  let shuttingDown = false;
+
+  const handler = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+
+    if (_activeTask) {
+      const { client, sessionId } = _activeTask;
+      try {
+        client.notify("session/cancel", { sessionId });
+      } catch {
+        // best-effort
+      }
+      // Close the client — this rejects pending requests, causing runGeminiTask's
+      // catch to fire. The worker's normal completion path then persists results.
+      // Do NOT call process.exit() here; let the normal flow complete.
+      await client.close().catch(() => {});
+    } else {
+      // No active task — exit directly
+      process.exit(143);
+    }
+  };
+
+  process.on("SIGTERM", handler);
+  process.on("SIGINT", handler);
+  return handler;
+}
 
 // ---------------------------------------------------------------------------
 // Sync helpers
@@ -126,12 +172,12 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
 // Async ACP-based task execution
 // ---------------------------------------------------------------------------
 
-function buildModelFailureResult(sessionId, model, resolvedModel, message) {
+function buildModelFailureResult(sessionId, model, resolvedModel, message, partialOutput = "") {
   const alternatives = suggestAlternatives(resolvedModel);
   const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
   return {
     ok: false,
-    rawOutput: "",
+    rawOutput: partialOutput,
     sessionId,
     stopReason: null,
     failureMessage: `${message}${suggestion}`
@@ -198,6 +244,9 @@ export async function runGeminiTask(cwd, options = {}) {
     };
   }
 
+  // Track active task for SIGTERM-based cancellation
+  _activeTask = { client, sessionId };
+
   // Persist sessionId immediately for graceful cancel support
   if (jobId && effectiveWorkspaceRoot) {
     try {
@@ -208,6 +257,7 @@ export async function runGeminiTask(cwd, options = {}) {
   }
 
   const chunks = [];
+  const logWriter = createBufferedLogWriter(logFile);
 
   client.setNotificationHandler((message) => {
     if (message.method !== "session/update") {
@@ -224,9 +274,10 @@ export async function runGeminiTask(cwd, options = {}) {
 
     if (update.sessionUpdate === "agent_message_chunk" && update.content?.text) {
       chunks.push(update.content.text);
-      appendLogLine(logFile, update.content.text);
+      logWriter.write(update.content.text);
       onProgress?.({ message: update.content.text, phase: "streaming" });
     } else if (update.sessionUpdate === "tool_call") {
+      logWriter.flush();
       const toolName = update.name ?? "tool";
       appendLogLine(logFile, `[tool_call] ${toolName}`);
       onProgress?.({ message: `Running: ${toolName}`, phase: "tool_call" });
@@ -235,47 +286,42 @@ export async function runGeminiTask(cwd, options = {}) {
 
   const promptTimeoutMs = timeoutMs ?? DEFAULT_PROMPT_TIMEOUT_MS;
 
-  let timeoutTimer;
-  const timeoutPromise = new Promise((_, reject) => {
-    timeoutTimer = setTimeout(() => {
-      reject(new Error(`Gemini prompt timed out after ${Math.round(promptTimeoutMs / 1000)}s.`));
-    }, promptTimeoutMs);
-    timeoutTimer.unref?.();
-  });
-
   let result;
   try {
-    result = await Promise.race([
+    result = await withTimeout(
       client.request("session/prompt", {
         sessionId,
         prompt: [{ type: "text", text: prompt }]
       }),
-      timeoutPromise
-    ]);
-    clearTimeout(timeoutTimer);
+      promptTimeoutMs, "Gemini prompt"
+    );
   } catch (err) {
-    clearTimeout(timeoutTimer);
+    logWriter.flush();
     // On timeout, try graceful cancel before closing
     try { client.notify("session/cancel", { sessionId }); } catch {}
     await client.close().catch(() => {});
+    _activeTask = null;
     const msg = err?.message ?? String(err);
+    const partialOutput = chunks.join("");
 
     if (/429|RESOURCE_EXHAUSTED|capacity|rate.limit/i.test(msg)) {
-      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" hit rate limits.`);
+      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" hit rate limits.`, partialOutput);
     }
     if (/malformed function call/i.test(msg)) {
-      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" returned malformed output.`);
+      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" returned malformed output.`, partialOutput);
     }
     return {
       ok: false,
-      rawOutput: "",
+      rawOutput: partialOutput,
       sessionId,
       stopReason: null,
       failureMessage: msg
     };
   }
 
+  logWriter.flush();
   await client.close().catch(() => {});
+  _activeTask = null;
 
   const stopReason = result?.stopReason ?? "unknown";
   const isSuccess = stopReason === "end_turn";
@@ -352,27 +398,17 @@ export async function runGeminiReview(cwd, options = {}) {
 
 /**
  * Interrupt / cancel a running ACP session.
- * Spawns a fresh short-lived ACP client, sends the cancel notification,
- * waits briefly for it to take effect, then closes.
  *
- * @param {string} sessionId - the session to cancel
- * @param {object} [opts]
- * @param {string} [opts.cwd]
- * @param {object} [opts.env]
- * @param {string} [opts.workspaceRoot]
- * @returns {Promise<void>}
+ * Cancellation is handled via SIGTERM: the background worker process traps
+ * SIGTERM (via installShutdownHandler) and sends session/cancel on its own
+ * active ACP connection. Callers should use terminateProcessTree(pid) on the
+ * worker PID instead of calling this function.
+ *
+ * This function is kept as a no-op for backward compatibility but does nothing
+ * useful — a fresh ACP client cannot reach another process's session.
+ *
+ * @deprecated Use terminateProcessTree on the worker PID instead.
  */
-export async function interruptSession(sessionId, opts = {}) {
-  const client = await spawnAcpClient({
-    cwd: opts.cwd,
-    env: opts.env,
-    workspaceRoot: opts.workspaceRoot
-  });
-
-  try {
-    client.notify("session/cancel", { sessionId });
-    await new Promise((resolve) => setTimeout(resolve, 200));
-  } finally {
-    await client.close().catch(() => {});
-  }
+export async function interruptSession(_sessionId, _opts = {}) {
+  // Intentional no-op. Cancellation is now handled by SIGTERM → installShutdownHandler.
 }

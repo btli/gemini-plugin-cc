@@ -30,6 +30,61 @@ export function appendLogLine(logFile, message) {
   fs.appendFileSync(logFile, `[${timestamp}] ${message}\n`, "utf8");
 }
 
+/**
+ * Prefix each non-empty line with a bracketed timestamp.
+ * Preserves the one-timestamp-per-line format that job progress parsing expects
+ * (lines matching /^\[/ in job-control.mjs).
+ */
+function timestampLines(text) {
+  if (!text || !/\S/.test(text)) return "";
+  const prefix = `[${new Date().toISOString()}] `;
+  const result = text.replace(/^(?=.)/gm, prefix);
+  return result.endsWith("\n") ? result : result + "\n";
+}
+
+/**
+ * Create a buffered log writer that accumulates text and flushes on newlines
+ * or when flush() is called explicitly. Reduces sync I/O for high-frequency
+ * streaming chunks. Each flushed line gets its own timestamp prefix.
+ */
+export function createBufferedLogWriter(logFile) {
+  const parts = [];
+
+  function drainBuffer() {
+    if (parts.length === 0) return "";
+    const joined = parts.join("");
+    parts.length = 0;
+    return joined;
+  }
+
+  function write(text) {
+    if (!logFile || !text) {
+      return;
+    }
+    parts.push(text);
+    // Flush complete lines
+    const lastNewline = text.lastIndexOf("\n");
+    if (lastNewline >= 0) {
+      const all = drainBuffer();
+      const splitAt = all.lastIndexOf("\n");
+      const toFlush = all.slice(0, splitAt + 1);
+      const remainder = all.slice(splitAt + 1);
+      if (remainder) parts.push(remainder);
+      fs.appendFileSync(logFile, timestampLines(toFlush), "utf8");
+    }
+  }
+
+  function flush() {
+    const remaining = drainBuffer();
+    if (!logFile || !remaining) {
+      return;
+    }
+    fs.appendFileSync(logFile, timestampLines(remaining), "utf8");
+  }
+
+  return { write, flush };
+}
+
 export function appendLogBlock(logFile, title, body) {
   if (!logFile || !title) {
     return;

@@ -7,8 +7,7 @@ import process from "node:process";
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { parseArgs, splitRawArgumentString } from "./lib/args.mjs";
-import { readJsonFile } from "./lib/fs.mjs";
+import { parseArgs } from "./lib/args.mjs";
 import {
   collectReviewContext,
   getReviewDiffStats,
@@ -20,10 +19,9 @@ import {
   getGeminiAuthStatus,
   runGeminiReview,
   runGeminiTask,
-  parseStructuredOutput,
   readOutputSchema,
   findLatestTaskSession,
-  interruptSession
+  installShutdownHandler
 } from "./lib/gemini.mjs";
 import {
   buildStatusSnapshot,
@@ -31,10 +29,9 @@ import {
   enrichJob,
   resolveCancelableJob,
   resolveResultJob,
-  readStoredJob,
-  sortJobsNewestFirst
+  readStoredJob
 } from "./lib/job-control.mjs";
-import { binaryAvailable, terminateProcessTree } from "./lib/process.mjs";
+import { binaryAvailable, isProcessAlive, terminateProcessTree } from "./lib/process.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import {
   renderSetupReport,
@@ -47,11 +44,9 @@ import {
 } from "./lib/render.mjs";
 import { getConfig, setConfig, listJobs, upsertJob, writeJobFile } from "./lib/state.mjs";
 import {
-  SESSION_ID_ENV,
   nowIso,
   createJobRecord,
-  createJobLogFile,
-  runTrackedJob
+  createJobLogFile
 } from "./lib/tracked-jobs.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
@@ -216,10 +211,7 @@ function executeReviewBackground(cwd, target, kind, options = {}) {
   const logFd = fs.openSync(logFile, "a");
   const child = spawn(process.execPath, workerArgs, {
     cwd,
-    env: {
-      ...process.env,
-      ...(process.env[SESSION_ID_ENV] ? { [SESSION_ID_ENV]: process.env[SESSION_ID_ENV] } : {})
-    },
+    env: { ...process.env },
     detached: true,
     stdio: ["ignore", logFd, logFd]
   });
@@ -232,6 +224,8 @@ function executeReviewBackground(cwd, target, kind, options = {}) {
 }
 
 async function handleReviewWorker(cwd, argv) {
+  installShutdownHandler();
+
   const { options } = parseArgs(argv, {
     valueOptions: new Set(["job-id", "kind", "cwd", "base", "model", "focus"]),
     booleanOptions: new Set([])
@@ -387,10 +381,7 @@ async function executeTask(cwd, prompt, options = {}) {
     const logFd = fs.openSync(logFile, "a");
     const child = spawn(process.execPath, workerArgs, {
       cwd,
-      env: {
-        ...process.env,
-        ...(process.env[SESSION_ID_ENV] ? { [SESSION_ID_ENV]: process.env[SESSION_ID_ENV] } : {})
-      },
+      env: { ...process.env },
       detached: true,
       stdio: ["ignore", logFd, logFd]
     });
@@ -415,6 +406,8 @@ async function executeTask(cwd, prompt, options = {}) {
 }
 
 async function handleTaskWorker(cwd, argv) {
+  installShutdownHandler();
+
   const { options } = parseArgs(argv, {
     valueOptions: new Set(["job-id", "cwd", "prompt", "model", "resume"]),
     booleanOptions: new Set(["read-only"])
@@ -519,13 +512,23 @@ async function handleCancel(cwd, argv) {
   const reference = positionals[0] ?? null;
   const { workspaceRoot, job } = resolveCancelableJob(cwd, reference);
 
-  if (job.sessionId) {
-    await interruptSession(job.sessionId, { cwd });
-  }
-
   if (job.pid) {
     try {
-      terminateProcessTree(job.pid);
+      // Send SIGTERM to just the worker PID (not the process group) so the
+      // worker's installShutdownHandler can gracefully cancel the ACP session
+      // before the transport dies. On Windows, fall through to terminateProcessTree.
+      if (process.platform !== "win32") {
+        process.kill(job.pid, "SIGTERM");
+        // Give the worker up to 3s to cancel the session, persist results, and exit
+        const deadline = Date.now() + 3000;
+        while (Date.now() < deadline && isProcessAlive(job.pid)) {
+          await new Promise((r) => setTimeout(r, 200));
+        }
+      }
+      // Fall back to tree kill if the worker is still alive (or on Windows)
+      if (isProcessAlive(job.pid)) {
+        terminateProcessTree(job.pid);
+      }
     } catch {
       // Process may already be gone.
     }

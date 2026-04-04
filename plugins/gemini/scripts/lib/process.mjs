@@ -116,6 +116,16 @@ export function terminateProcessTree(pid, options = {}) {
   }
 }
 
+export function isProcessAlive(pid) {
+  if (!Number.isFinite(pid)) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function formatCommandFailure(result) {
   const parts = [`${result.command} ${result.args.join(" ")}`.trim()];
   if (result.signal) {
