@@ -137,6 +137,8 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
 // Async ACP-based task execution
 // ---------------------------------------------------------------------------
 
+const DEFAULT_PROMPT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes, same as old spawnSync default
+
 /**
  * Run a Gemini task via ACP.
  *
@@ -151,6 +153,7 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
  * @param {object}  [options.env]
  * @param {string}  [options.jobId]
  * @param {string}  [options.workspaceRoot]
+ * @param {number}  [options.timeoutMs]
  * @returns {Promise<{ok: boolean, rawOutput: string, sessionId: string|null, stopReason: string|null, failureMessage: string|null}>}
  */
 export async function runGeminiTask(cwd, options = {}) {
@@ -163,7 +166,8 @@ export async function runGeminiTask(cwd, options = {}) {
     onProgress,
     env,
     jobId,
-    workspaceRoot
+    workspaceRoot,
+    timeoutMs
   } = options;
 
   const resolvedModel = resolveModel(model);
@@ -227,13 +231,30 @@ export async function runGeminiTask(cwd, options = {}) {
     }
   });
 
+  const promptTimeoutMs = timeoutMs ?? DEFAULT_PROMPT_TIMEOUT_MS;
+
+  let timeoutTimer;
+  const timeoutPromise = new Promise((_, reject) => {
+    timeoutTimer = setTimeout(() => {
+      reject(new Error(`Gemini prompt timed out after ${Math.round(promptTimeoutMs / 1000)}s.`));
+    }, promptTimeoutMs);
+    timeoutTimer.unref?.();
+  });
+
   let result;
   try {
-    result = await client.request("session/prompt", {
-      sessionId,
-      prompt: [{ type: "text", text: prompt }]
-    });
+    result = await Promise.race([
+      client.request("session/prompt", {
+        sessionId,
+        prompt: [{ type: "text", text: prompt }]
+      }),
+      timeoutPromise
+    ]);
+    clearTimeout(timeoutTimer);
   } catch (err) {
+    clearTimeout(timeoutTimer);
+    // On timeout, try graceful cancel before closing
+    try { client.notify("session/cancel", { sessionId }); } catch {}
     await client.close().catch(() => {});
     const msg = err?.message ?? String(err);
 
@@ -312,7 +333,8 @@ export async function runGeminiReview(cwd, options = {}) {
     logFile,
     onProgress,
     env,
-    workspaceRoot: effectiveWorkspaceRoot
+    workspaceRoot: effectiveWorkspaceRoot,
+    timeoutMs
   });
 
   if (!taskResult.ok) {
