@@ -243,12 +243,16 @@ async function handleReviewWorker(cwd, argv) {
   const workspaceRoot = resolveWorkspaceRoot(workerCwd);
   const target = options.base ? { mode: "branch", base: options.base } : resolveReviewTarget(workerCwd);
 
+  const jobRecord = listJobs(workspaceRoot).find((j) => j.id === jobId);
+
   const { prompt, targetLabel } = buildReviewPrompt(workerCwd, target, kind, options.focus);
   const reviewLabel = kind === "adversarial-review" ? "Adversarial Review" : "Review";
 
   const result = await runGeminiReview(workerCwd, {
     prompt,
-    model: options.model
+    model: options.model,
+    workspaceRoot,
+    logFile: jobRecord?.logFile ?? null
   });
 
   const rendered = renderReviewResult(
@@ -420,11 +424,16 @@ async function handleTaskWorker(cwd, argv) {
   const workspaceRoot = resolveWorkspaceRoot(workerCwd);
   const write = !options["read-only"];
 
+  const jobRecord = listJobs(workspaceRoot).find((j) => j.id === jobId);
+
   const result = await runGeminiTask(workerCwd, {
     prompt: options.prompt,
     model: options.model,
     write,
-    resume: options.resume
+    resume: options.resume,
+    jobId,
+    workspaceRoot,
+    logFile: jobRecord?.logFile ?? null
   });
 
   const rendered = renderTaskResult(result);

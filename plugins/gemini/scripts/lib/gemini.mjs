@@ -179,7 +179,8 @@ export async function runGeminiTask(cwd, options = {}) {
   try {
     if (resume) {
       ({ client, sessionId } = await resumeSession(resume, {
-        cwd, env, workspaceRoot: effectiveWorkspaceRoot, write, logFile
+        cwd, env, workspaceRoot: effectiveWorkspaceRoot, write, logFile,
+        modeId, model: resolvedModel
       }));
     } else {
       ({ client, sessionId } = await createSession({
@@ -275,12 +276,16 @@ export async function runGeminiTask(cwd, options = {}) {
   }
 
   await client.close().catch(() => {});
+
+  const stopReason = result?.stopReason ?? "unknown";
+  const isSuccess = stopReason === "end_turn";
+
   return {
-    ok: true,
+    ok: isSuccess,
     rawOutput: chunks.join(""),
     sessionId,
-    stopReason: result?.stopReason ?? "unknown",
-    failureMessage: null
+    stopReason,
+    failureMessage: isSuccess ? null : `Gemini turn ended with stop reason: ${stopReason}`
   };
 }
 

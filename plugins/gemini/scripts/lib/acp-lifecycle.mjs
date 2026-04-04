@@ -199,6 +199,14 @@ export async function resumeSession(sessionId, opts = {}) {
   try {
     const cwd = opts.cwd ?? process.cwd();
     await client.request("session/load", { sessionId, cwd });
+
+    // Reapply mode and model (same as createSession)
+    const setup = [client.request("session/set_mode", { sessionId, modeId: opts.modeId ?? "default" })];
+    if (opts.model) {
+      setup.push(client.request("session/set_model", { sessionId, modelId: opts.model }));
+    }
+    await Promise.all(setup);
+
     return { client, sessionId };
   } catch (err) {
     await client.close().catch(() => {});
