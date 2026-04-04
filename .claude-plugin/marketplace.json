@@ -1,0 +1,21 @@
+{
+  "name": "gemini",
+  "owner": {
+    "name": "Community"
+  },
+  "metadata": {
+    "description": "Gemini plugin to use in Claude Code for delegation and code review.",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "gemini",
+      "description": "Use Gemini from Claude Code to review code or delegate tasks.",
+      "version": "1.0.0",
+      "author": {
+        "name": "Community"
+      },
+      "source": "./plugins/gemini"
+    }
+  ]
+}
