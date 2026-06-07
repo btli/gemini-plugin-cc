@@ -7,7 +7,8 @@ import { installFakeAgy, FAKE_CONVERSATION_ID } from "./fake-agy-fixture.mjs";
 import {
   buildAgyArgs,
   parseAgyLog,
-  runAgyPrint
+  runAgyPrint,
+  killActiveAgyChild
 } from "../plugins/antigravity/scripts/lib/agy-cli.mjs";
 
 describe("buildAgyArgs", () => {
@@ -200,6 +201,24 @@ describe("runAgyPrint", () => {
     }
   });
 
+  it("uses the passed conversation id when no log is available", async () => {
+    const binDir = createTempDir("agy-cli-test-");
+    try {
+      const agyPath = installFakeAgy(binDir, "task-ok");
+      const resumeId = "aaaaaaaa-bbbb-cccc-dddd-eeeeffff0000";
+      const result = await runAgyPrint({
+        prompt: "x",
+        conversationId: resumeId,
+        binary: agyPath,
+        cwd: binDir,
+        timeoutMs: 10_000
+      });
+      assert.equal(result.conversationId, resumeId);
+    } finally {
+      cleanTempDir(binDir);
+    }
+  });
+
   it("reports spawn failures without throwing", async () => {
     const result = await runAgyPrint({
       prompt: "x",
@@ -208,5 +227,33 @@ describe("runAgyPrint", () => {
     });
     assert.equal(result.ok, false);
     assert.ok(result.spawnErrorMessage);
+  });
+});
+
+describe("killActiveAgyChild", () => {
+  it("returns false when no child is active", async () => {
+    assert.equal(killActiveAgyChild(), false);
+  });
+
+  it("kills a running child and returns true; second call returns false after settle", async () => {
+    const binDir = createTempDir("agy-cli-test-");
+    try {
+      const agyPath = installFakeAgy(binDir, "hang");
+      const promise = runAgyPrint({
+        prompt: "x",
+        binary: agyPath,
+        agyLogFile: path.join(binDir, "run.agy.log"),
+        cwd: binDir,
+        timeoutMs: 30_000
+      });
+      // Give the child a moment to spawn
+      await new Promise((r) => setTimeout(r, 300));
+      assert.equal(killActiveAgyChild(), true);
+      const result = await promise;
+      assert.equal(result.ok, false);
+      assert.equal(killActiveAgyChild(), false);
+    } finally {
+      cleanTempDir(binDir);
+    }
   });
 });

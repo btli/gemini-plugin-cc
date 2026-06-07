@@ -8,9 +8,12 @@ const MAX_LOG_READ_BYTES = 5 * 1024 * 1024;
 
 // Matches both fresh runs ("Print mode: conversation=<uuid>, sending message")
 // and resumed runs ("Print mode: resuming conversation <uuid>").
-const CONVERSATION_RE = /Print mode: (?:resuming )?conversation[= ]([0-9a-f-]{36})/i;
+const CONVERSATION_RE = /Print mode: (?:resuming )?conversation[= ]([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
 const MODEL_LABEL_RE = /Propagating selected model override to backend: label="([^"]+)"/g;
 
+// Single-flight invariant: each worker process runs at most one agy print
+// invocation at a time (the facade enforces this), so one module-level slot
+// is sufficient. Concurrent runAgyPrint calls in one process would clobber it.
 let _activeChild = null;
 
 /**
@@ -137,6 +140,8 @@ export function runAgyPrint(options = {}) {
     const args = buildAgyArgs({ modelLabel, conversationId, agyLogFile, timeoutMs, skipPermissions });
     const child = spawn(binary, args, { cwd, env, stdio: ["pipe", "pipe", "pipe"] });
     _activeChild = child;
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
 
     let stdout = "";
     let stderr = "";
@@ -152,6 +157,7 @@ export function runAgyPrint(options = {}) {
         // already gone
       }
       killTimer = setTimeout(() => {
+        if (settled) return;
         try {
           child.kill("SIGKILL");
         } catch {
