@@ -88,11 +88,11 @@ function escapeMarkdownCell(value) {
     .trim();
 }
 
-function formatGeminiResumeCommand(job) {
+function formatAgyResumeCommand(job) {
   if (!job?.sessionId) {
     return null;
   }
-  return `gemini --resume ${job.sessionId}`;
+  return `agy --conversation ${job.sessionId}`;
 }
 
 function appendActiveJobsTable(lines, jobs) {
@@ -100,9 +100,9 @@ function appendActiveJobsTable(lines, jobs) {
   lines.push("| Job | Kind | Status | Phase | Elapsed | Session ID | Summary | Actions |");
   lines.push("| --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const job of jobs) {
-    const actions = [`/gemini:status ${job.id}`];
+    const actions = [`/antigravity:status ${job.id}`];
     if (job.status === "queued" || job.status === "running") {
-      actions.push(`/gemini:cancel ${job.id}`);
+      actions.push(`/antigravity:cancel ${job.id}`);
     }
     lines.push(
       `| ${escapeMarkdownCell(job.id)} | ${escapeMarkdownCell(job.kindLabel)} | ${escapeMarkdownCell(job.status)} | ${escapeMarkdownCell(job.phase ?? "")} | ${escapeMarkdownCell(job.elapsed ?? "")} | ${escapeMarkdownCell(job.sessionId ?? "")} | ${escapeMarkdownCell(job.summary ?? "")} | ${actions.map((action) => `\`${action}\``).join("<br>")} |`
@@ -132,24 +132,24 @@ function pushJobDetails(lines, job, options = {}) {
     lines.push(`  Duration: ${job.duration}`);
   }
   if (job.sessionId) {
-    lines.push(`  Gemini session ID: ${job.sessionId}`);
+    lines.push(`  agy conversation ID: ${job.sessionId}`);
   }
-  const resumeCommand = formatGeminiResumeCommand(job);
+  const resumeCommand = formatAgyResumeCommand(job);
   if (resumeCommand) {
-    lines.push(`  Resume in Gemini: ${resumeCommand}`);
+    lines.push(`  Resume with agy: ${resumeCommand}`);
   }
   if (job.logFile && options.showLog) {
     lines.push(`  Log: ${job.logFile}`);
   }
   if ((job.status === "queued" || job.status === "running") && options.showCancelHint) {
-    lines.push(`  Cancel: /gemini:cancel ${job.id}`);
+    lines.push(`  Cancel: /antigravity:cancel ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && options.showResultHint) {
-    lines.push(`  Result: /gemini:result ${job.id}`);
+    lines.push(`  Result: /antigravity:result ${job.id}`);
   }
   if (job.status !== "queued" && job.status !== "running" && job.jobClass === "task" && job.write && options.showReviewHint) {
-    lines.push("  Review changes: /gemini:review --wait");
-    lines.push("  Stricter review: /gemini:adversarial-review --wait");
+    lines.push("  Review changes: /antigravity:review --wait");
+    lines.push("  Stricter review: /antigravity:adversarial-review --wait");
   }
   if (job.progressPreview?.length) {
     lines.push("  Progress:");
@@ -206,9 +206,9 @@ export function renderSetupReport(report) {
 export function renderReviewResult(parsedResult, meta) {
   if (!parsedResult.parsed) {
     const lines = [
-      `# Gemini ${meta.reviewLabel}`,
+      `# Antigravity ${meta.reviewLabel}`,
       "",
-      "Gemini did not return valid structured JSON.",
+      "Antigravity did not return valid structured JSON.",
       "",
       `- Parse error: ${parsedResult.parseError}`
     ];
@@ -225,10 +225,10 @@ export function renderReviewResult(parsedResult, meta) {
   const validationError = validateReviewResultShape(parsedResult.parsed);
   if (validationError) {
     const lines = [
-      `# Gemini ${meta.reviewLabel}`,
+      `# Antigravity ${meta.reviewLabel}`,
       "",
       `Target: ${meta.targetLabel}`,
-      "Gemini returned JSON with an unexpected review shape.",
+      "Antigravity returned JSON with an unexpected review shape.",
       "",
       `- Validation error: ${validationError}`
     ];
@@ -245,7 +245,7 @@ export function renderReviewResult(parsedResult, meta) {
   const data = normalizeReviewResultData(parsedResult.parsed);
   const findings = [...data.findings].sort((left, right) => severityRank(left.severity) - severityRank(right.severity));
   const lines = [
-    `# Gemini ${meta.reviewLabel}`,
+    `# Antigravity ${meta.reviewLabel}`,
     "",
     `Target: ${meta.targetLabel}`,
     `Verdict: ${data.verdict}`,
@@ -286,13 +286,13 @@ export function renderTaskResult(result) {
     return rawOutput.endsWith("\n") ? rawOutput : `${rawOutput}\n`;
   }
 
-  const message = String(result?.failureMessage ?? "").trim() || "Gemini did not return a final message.";
+  const message = String(result?.failureMessage ?? "").trim() || "Antigravity did not return a final message.";
   return `${message}\n`;
 }
 
 export function renderStatusReport(report) {
   const lines = [
-    "# Gemini Status",
+    "# Antigravity Status",
     "",
     `Session runtime: direct`,
     `Review gate: ${report.config.stopReviewGate ? "enabled" : "disabled"}`,
@@ -336,14 +336,14 @@ export function renderStatusReport(report) {
 
   if (report.needsReview) {
     lines.push("The stop-time review gate is enabled.");
-    lines.push("Ending the session will trigger a fresh Gemini adversarial review and block if it finds issues.");
+    lines.push("Ending the session will trigger a fresh Antigravity adversarial review and block if it finds issues.");
   }
 
   return `${lines.join("\n").trimEnd()}\n`;
 }
 
 export function renderJobStatusReport(job) {
-  const lines = ["# Gemini Job Status", ""];
+  const lines = ["# Antigravity Job Status", ""];
   pushJobDetails(lines, job, {
     showElapsed: job.status === "queued" || job.status === "running",
     showDuration: job.status !== "queued" && job.status !== "running",
@@ -357,14 +357,14 @@ export function renderJobStatusReport(job) {
 
 export function renderStoredJobResult(job, storedJob) {
   const sessionId = storedJob?.sessionId ?? job.sessionId ?? null;
-  const resumeCommand = sessionId ? `gemini --resume ${sessionId}` : null;
+  const resumeCommand = sessionId ? `agy --conversation ${sessionId}` : null;
 
   if (isStructuredReviewStoredResult(storedJob) && storedJob?.rendered) {
     const output = storedJob.rendered.endsWith("\n") ? storedJob.rendered : `${storedJob.rendered}\n`;
     if (!sessionId) {
       return output;
     }
-    return `${output}\nGemini session ID: ${sessionId}\nResume in Gemini: ${resumeCommand}\n`;
+    return `${output}\nagy conversation ID: ${sessionId}\nResume with agy: ${resumeCommand}\n`;
   }
 
   const rawOutput =
@@ -375,7 +375,7 @@ export function renderStoredJobResult(job, storedJob) {
     if (!sessionId) {
       return output;
     }
-    return `${output}\nGemini session ID: ${sessionId}\nResume in Gemini: ${resumeCommand}\n`;
+    return `${output}\nagy conversation ID: ${sessionId}\nResume with agy: ${resumeCommand}\n`;
   }
 
   if (storedJob?.rendered) {
@@ -383,19 +383,19 @@ export function renderStoredJobResult(job, storedJob) {
     if (!sessionId) {
       return output;
     }
-    return `${output}\nGemini session ID: ${sessionId}\nResume in Gemini: ${resumeCommand}\n`;
+    return `${output}\nagy conversation ID: ${sessionId}\nResume with agy: ${resumeCommand}\n`;
   }
 
   const lines = [
-    `# ${job.title ?? "Gemini Result"}`,
+    `# ${job.title ?? "Antigravity Result"}`,
     "",
     `Job: ${job.id}`,
     `Status: ${job.status}`
   ];
 
   if (sessionId) {
-    lines.push(`Gemini session ID: ${sessionId}`);
-    lines.push(`Resume in Gemini: ${resumeCommand}`);
+    lines.push(`agy conversation ID: ${sessionId}`);
+    lines.push(`Resume with agy: ${resumeCommand}`);
   }
 
   if (job.summary) {
@@ -415,7 +415,7 @@ export function renderStoredJobResult(job, storedJob) {
 
 export function renderCancelReport(job) {
   const lines = [
-    "# Gemini Cancel",
+    "# Antigravity Cancel",
     "",
     `Cancelled ${job.id}.`,
     ""
@@ -427,7 +427,7 @@ export function renderCancelReport(job) {
   if (job.summary) {
     lines.push(`- Summary: ${job.summary}`);
   }
-  lines.push("- Check `/gemini:status` for the updated queue.");
+  lines.push("- Check `/antigravity:status` for the updated queue.");
 
   return `${lines.join("\n").trimEnd()}\n`;
 }

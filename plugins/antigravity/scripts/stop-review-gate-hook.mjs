@@ -60,7 +60,7 @@ function buildSetupNote() {
   if (authStatus.loggedIn) {
     return null;
   }
-  return `Gemini is not set up for the review gate. ${authStatus.detail}. Run /gemini:setup and, if needed, !gemini auth login.`;
+  return `Antigravity is not set up for the review gate. ${authStatus.detail}. Run /antigravity:setup and, if needed, run agy interactively to sign in.`;
 }
 
 function parseStopReviewOutput(rawOutput) {
@@ -69,7 +69,7 @@ function parseStopReviewOutput(rawOutput) {
     return {
       ok: false,
       reason:
-        "The stop-time Gemini review task returned no final output. Run /gemini:review --wait manually or bypass the gate."
+        "The stop-time Antigravity review task returned no final output. Run /antigravity:review --wait manually or bypass the gate."
     };
   }
 
@@ -81,14 +81,14 @@ function parseStopReviewOutput(rawOutput) {
     const reason = firstLine.slice("BLOCK:".length).trim() || text;
     return {
       ok: false,
-      reason: `Gemini stop-time review found issues that still need fixes before ending the session: ${reason}`
+      reason: `Antigravity stop-time review found issues that still need fixes before ending the session: ${reason}`
     };
   }
 
   return {
     ok: false,
     reason:
-      "The stop-time Gemini review task returned an unexpected answer. Run /gemini:review --wait manually or bypass the gate."
+      "The stop-time Antigravity review task returned an unexpected answer. Run /antigravity:review --wait manually or bypass the gate."
   };
 }
 
@@ -110,7 +110,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Gemini review task timed out after 15 minutes. Run /gemini:review --wait manually or bypass the gate."
+        "The stop-time Antigravity review task timed out after 15 minutes. Run /antigravity:review --wait manually or bypass the gate."
     };
   }
 
@@ -119,8 +119,8 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason: detail
-        ? `The stop-time Gemini review task failed: ${detail}`
-        : "The stop-time Gemini review task failed. Run /gemini:review --wait manually or bypass the gate."
+        ? `The stop-time Antigravity review task failed: ${detail}`
+        : "The stop-time Antigravity review task failed. Run /antigravity:review --wait manually or bypass the gate."
     };
   }
 
@@ -131,7 +131,7 @@ function runStopReview(cwd, input = {}) {
     return {
       ok: false,
       reason:
-        "The stop-time Gemini review task returned invalid JSON. Run /gemini:review --wait manually or bypass the gate."
+        "The stop-time Antigravity review task returned invalid JSON. Run /antigravity:review --wait manually or bypass the gate."
     };
   }
 }
@@ -145,7 +145,7 @@ function main() {
   const jobs = sortJobsNewestFirst(filterJobsForCurrentSession(listJobs(workspaceRoot), input));
   const runningJob = jobs.find((job) => job.status === "queued" || job.status === "running");
   const runningTaskNote = runningJob
-    ? `Gemini task ${runningJob.id} is still running. Check /gemini:status and use /gemini:cancel ${runningJob.id} if you want to stop it before ending the session.`
+    ? `Antigravity task ${runningJob.id} is still running. Check /antigravity:status and use /antigravity:cancel ${runningJob.id} if you want to stop it before ending the session.`
     : null;
 
   if (!config.stopReviewGate) {

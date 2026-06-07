@@ -217,7 +217,7 @@ function executeReviewBackground(cwd, target, kind, options = {}) {
 
   upsertJob(workspaceRoot, { id: jobId, pid: child.pid, status: "running", startedAt: nowIso() });
 
-  process.stdout.write(`Started background ${kind}: job ${jobId}\nCheck progress: /gemini:status ${jobId}\nGet result: /gemini:result ${jobId}\n`);
+  process.stdout.write(`Started background ${kind}: job ${jobId}\nCheck progress: /antigravity:status ${jobId}\nGet result: /antigravity:result ${jobId}\n`);
 }
 
 async function handleReviewWorker(cwd, argv) {
@@ -326,7 +326,7 @@ async function handleTask(cwd, argv) {
         model, write, resume: lastJob.sessionId, background: isBackground
       });
     }
-    process.stderr.write("No previous Gemini session found. Starting fresh.\n");
+    process.stderr.write("No previous agy conversation found. Starting fresh.\n");
   }
 
   if (!prompt) {
@@ -387,7 +387,7 @@ async function executeTask(cwd, prompt, options = {}) {
 
     upsertJob(workspaceRoot, { id: jobId, pid: child.pid, status: "running", startedAt: nowIso() });
 
-    process.stdout.write(`Started background task: job ${jobId}\nCheck progress: /gemini:status ${jobId}\nGet result: /gemini:result ${jobId}\n`);
+    process.stdout.write(`Started background task: job ${jobId}\nCheck progress: /antigravity:status ${jobId}\nGet result: /antigravity:result ${jobId}\n`);
     return;
   }
 
@@ -606,7 +606,7 @@ async function main() {
       await handleCancel(cwd, argv);
       break;
     default:
-      process.stderr.write(`Unknown command: ${command ?? "(none)"}\nUsage: gemini-companion <setup|review|adversarial-review|task|status|result|cancel> [options]\n`);
+      process.stderr.write(`Unknown command: ${command ?? "(none)"}\nUsage: antigravity-companion <setup|review|adversarial-review|task|status|result|cancel> [options]\n`);
       process.exitCode = 1;
   }
 }

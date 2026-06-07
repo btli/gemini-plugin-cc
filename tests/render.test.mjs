@@ -67,7 +67,7 @@ describe("renderReviewResult", () => {
       },
       { reviewLabel: "Review", targetLabel: "Working tree changes", reasoningSummary: null }
     );
-    assert.ok(output.includes("# Gemini Review"));
+    assert.ok(output.includes("# Antigravity Review"));
     assert.ok(output.includes("Verdict: needs-attention"));
     assert.ok(output.includes("[high] Bug"));
     assert.ok(output.includes("test.js:10"));
@@ -92,14 +92,14 @@ describe("renderTaskResult", () => {
 
   it("handles missing output", () => {
     const output = renderTaskResult({});
-    assert.ok(output.includes("Gemini did not return a final message"));
+    assert.ok(output.includes("Antigravity did not return a final message"));
   });
 });
 
 describe("renderCancelReport", () => {
   it("renders cancel confirmation", () => {
     const output = renderCancelReport({ id: "abc123", title: "Test job", summary: "Testing" });
-    assert.ok(output.includes("# Gemini Cancel"));
+    assert.ok(output.includes("# Antigravity Cancel"));
     assert.ok(output.includes("Cancelled abc123"));
     assert.ok(output.includes("Test job"));
   });
