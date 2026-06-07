@@ -6,7 +6,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { getGeminiAuthStatus } from "./lib/antigravity.mjs";
+import { getAntigravityAuthStatus } from "./lib/antigravity.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import { getConfig, listJobs } from "./lib/state.mjs";
 import { sortJobsNewestFirst } from "./lib/job-control.mjs";
@@ -56,7 +56,7 @@ function buildStopReviewPrompt(input = {}) {
 }
 
 function buildSetupNote() {
-  const authStatus = getGeminiAuthStatus();
+  const authStatus = getAntigravityAuthStatus();
   if (authStatus.loggedIn) {
     return null;
   }

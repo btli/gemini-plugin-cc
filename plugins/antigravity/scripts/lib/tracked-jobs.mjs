@@ -2,7 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { upsertJob, resolveStateDir, writeJobFile } from "./state.mjs";
 
-export const SESSION_ID_ENV = "GEMINI_COMPANION_SESSION_ID";
+export const SESSION_ID_ENV = "ANTIGRAVITY_COMPANION_SESSION_ID";
 
 export function nowIso() {
   return new Date().toISOString();

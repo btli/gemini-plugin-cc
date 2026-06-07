@@ -1,51 +1,42 @@
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { createSession, resumeSession, withTimeout } from "./acp-lifecycle.mjs";
+import {
+  runAgyPrint,
+  killActiveAgyChild,
+  parseAgyLog,
+  readAgyLog,
+  DEFAULT_PRINT_TIMEOUT_MS
+} from "./agy-cli.mjs";
+import { createReviewWorktree, sweepOrphanedWorktrees } from "./review-worktree.mjs";
 import { DEFAULT_MODEL, resolveModel, suggestAlternatives } from "./models.mjs";
-import { binaryAvailable } from "./process.mjs";
-import { readJsonFile } from "./fs.mjs";
-import { appendLogLine, createBufferedLogWriter } from "./tracked-jobs.mjs";
+import { binaryAvailable, runCommand } from "./process.mjs";
+import { createTempDir, readJsonFile } from "./fs.mjs";
+import { appendLogBlock, appendLogLine } from "./tracked-jobs.mjs";
 import { upsertJob } from "./state.mjs";
 import { resolveWorkspaceRoot } from "./workspace.mjs";
 
 // ---------------------------------------------------------------------------
-// Module-level active task tracking (for SIGTERM-based cancellation)
+// Shutdown handling (SIGTERM-based cancellation)
 // ---------------------------------------------------------------------------
 
-let _activeTask = null;
-
 /**
- * Install a SIGTERM/SIGINT handler that gracefully cancels the active ACP session.
- * Call this in background worker processes so that `handleCancel` (which sends
- * SIGTERM to the worker PID) triggers a clean session/cancel on the live
- * connection instead of requiring a separate ACP client.
- *
- * When a task is active, the handler sends session/cancel and closes the client.
- * Closing the client rejects the pending session/prompt promise, which lets
- * runGeminiTask flow through its normal catch path — preserving partial output
- * and allowing the worker to persist results before exiting naturally.
+ * Install a SIGTERM/SIGINT handler for background workers. /cancel SIGTERMs
+ * the worker PID; this handler SIGTERMs the active agy subprocess, which does
+ * its own graceful conversation cleanup. The in-flight runAgyPrint then
+ * resolves through its normal close path, so the worker persists partial
+ * output before exiting naturally.
  */
 export function installShutdownHandler() {
   let shuttingDown = false;
 
-  const handler = async () => {
+  const handler = () => {
     if (shuttingDown) return;
     shuttingDown = true;
 
-    if (_activeTask) {
-      const { client, sessionId } = _activeTask;
-      try {
-        client.notify("session/cancel", { sessionId });
-      } catch {
-        // best-effort
-      }
-      // Close the client — this rejects pending requests, causing runGeminiTask's
-      // catch to fire. The worker's normal completion path then persists results.
-      // Do NOT call process.exit() here; let the normal flow complete.
-      await client.close().catch(() => {});
-    } else {
-      // No active task — exit directly
+    const killed = killActiveAgyChild("SIGTERM");
+    if (!killed) {
+      // No active agy run — exit directly.
       process.exit(143);
     }
   };
@@ -59,52 +50,26 @@ export function installShutdownHandler() {
 // Sync helpers
 // ---------------------------------------------------------------------------
 
-export function getGeminiAvailability(cwd) {
-  return binaryAvailable("gemini", ["--version"], { cwd });
+export function getAntigravityAvailability(cwd) {
+  return binaryAvailable("agy", ["--version"], { cwd });
 }
 
-export function getGeminiAuthStatus() {
+export function getAntigravityAuthStatus() {
   const geminiDir = path.join(os.homedir(), ".gemini");
-  const oauthPath = path.join(geminiDir, "oauth_creds.json");
-  const credsPath = path.join(geminiDir, "gemini-credentials.json");
-  const settingsPath = path.join(geminiDir, "settings.json");
-
-  const hasOauth = fs.existsSync(oauthPath);
-  const hasCreds = fs.existsSync(credsPath);
-
-  // Also check for API key in settings
-  let hasApiKey = false;
-  if (fs.existsSync(settingsPath)) {
-    try {
-      const settings = readJsonFile(settingsPath);
-      hasApiKey = Boolean(settings?.apiKey || settings?.["api-key"]);
-    } catch {
-      // ignore
+  for (const marker of ["oauth_creds.json", "google_accounts.json"]) {
+    if (fs.existsSync(path.join(geminiDir, marker))) {
+      return { available: true, loggedIn: true, detail: "authenticated (Google account)" };
     }
   }
-
-  // Check GEMINI_API_KEY env
-  const hasEnvKey = Boolean(process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY);
-
-  if (hasOauth) {
-    return { available: true, loggedIn: true, detail: "authenticated (Google OAuth)" };
-  }
-  if (hasCreds) {
-    return { available: true, loggedIn: true, detail: "authenticated (credentials)" };
-  }
-  if (hasApiKey || hasEnvKey) {
-    return { available: true, loggedIn: true, detail: "authenticated (API key)" };
-  }
-
   return {
     available: true,
     loggedIn: false,
-    detail: "not authenticated. Run: gemini auth login"
+    detail: "not authenticated. Run agy interactively once and complete sign-in"
   };
 }
 
 // ---------------------------------------------------------------------------
-// Structured output parser (3-strategy: direct → fence → brace)
+// Structured output parser (3-strategy: direct → fence → brace) — unchanged
 // ---------------------------------------------------------------------------
 
 export function parseStructuredOutput(rawText) {
@@ -113,7 +78,6 @@ export function parseStructuredOutput(rawText) {
     return { parsed: null, parseError: "Empty response text", rawOutput: "" };
   }
 
-  // Try direct JSON parse
   try {
     const data = JSON.parse(text);
     return { parsed: data, parseError: null, rawOutput: text };
@@ -121,7 +85,6 @@ export function parseStructuredOutput(rawText) {
     // continue
   }
 
-  // Try extracting JSON from markdown code blocks
   const jsonBlockMatch = text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/);
   if (jsonBlockMatch) {
     try {
@@ -132,7 +95,6 @@ export function parseStructuredOutput(rawText) {
     }
   }
 
-  // Try finding JSON object in the text
   const firstBrace = text.indexOf("{");
   const lastBrace = text.lastIndexOf("}");
   if (firstBrace >= 0 && lastBrace > firstBrace) {
@@ -146,7 +108,7 @@ export function parseStructuredOutput(rawText) {
 
   return {
     parsed: null,
-    parseError: "Could not extract JSON from Gemini response",
+    parseError: "Could not extract JSON from Antigravity response",
     rawOutput: text
   };
 }
@@ -169,80 +131,112 @@ export function findLatestTaskSession(workspaceRoot, listJobs) {
 }
 
 // ---------------------------------------------------------------------------
-// Async ACP-based task execution
+// Output post-processing helpers
 // ---------------------------------------------------------------------------
 
 /**
- * Extract text strings from a content array.
- * Handles both plain strings and MCP-style objects ({ type: "text", text: "..." }).
+ * Strip an absolute path prefix (e.g. the review worktree) from model output
+ * so findings reference repo-relative paths. Handles the macOS
+ * /var ↔ /private/var symlink in both directions.
  */
-export function extractTextFromContent(content) {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  return content
-    .filter((c) => c && typeof c.text === "string")
-    .map((c) => c.text)
-    .join("");
+export function stripPathPrefix(text, prefix) {
+  if (!text || !prefix) {
+    return text ?? "";
+  }
+  const variantSet = new Set([prefix]);
+  if (prefix.startsWith("/private/")) {
+    variantSet.add(prefix.slice("/private".length));
+  } else if (prefix.startsWith("/")) {
+    variantSet.add(`/private${prefix}`);
+  }
+
+  // Process longest variants first so shorter ones that are substrings of longer
+  // ones (e.g. /var/... inside /private/var/...) don't corrupt the string first.
+  const variants = [...variantSet].sort((a, b) => b.length - a.length);
+
+  let result = text;
+  for (const variant of variants) {
+    result = result.split(`${variant}/`).join("");
+    result = result.split(variant).join(".");
+  }
+  return result;
+}
+
+function captureGitStatus(cwd) {
+  const status = runCommand("git", ["status", "--porcelain"], { cwd });
+  return status.status === 0 ? status.stdout : null;
+}
+
+/** Lines present in `after` but not in `before` (both `git status --porcelain`). */
+export function detectWorkingTreeDelta(before, after) {
+  if (before == null || after == null || before === after) {
+    return [];
+  }
+  const beforeLines = new Set(before.split("\n").filter(Boolean));
+  return after.split("\n").filter(Boolean).filter((line) => !beforeLines.has(line));
+}
+
+// ---------------------------------------------------------------------------
+// Task execution (agy print mode)
+// ---------------------------------------------------------------------------
+
+const READ_ONLY_GUARD =
+  "IMPORTANT: You are running in READ-ONLY mode. Do not create, modify, or delete any files, " +
+  "and do not run commands that change repository or system state. If a change would be needed, describe it instead.";
+
+const RATE_LIMIT_RE = /429|RESOURCE_EXHAUSTED|capacity|rate.?limit/i;
+const AUTH_FAILURE_RE = /not logged in|authentication failed/i;
+
+const CONVERSATION_WATCH_INTERVAL_MS = 500;
+
+/**
+ * Poll the agy log for the conversation id while the run is in flight, so a
+ * hard-killed worker still leaves a resumable id in job state (parity with
+ * the old "persist sessionId immediately" ACP behavior).
+ */
+function watchConversationId(agyLogFile, onFound) {
+  if (!agyLogFile) {
+    return () => {};
+  }
+  let stopped = false;
+  const timer = setInterval(() => {
+    const { conversationId } = parseAgyLog(readAgyLog(agyLogFile));
+    if (conversationId) {
+      stop();
+      onFound(conversationId);
+    }
+  }, CONVERSATION_WATCH_INTERVAL_MS);
+  timer.unref?.();
+
+  function stop() {
+    if (!stopped) {
+      stopped = true;
+      clearInterval(timer);
+    }
+  }
+  return stop;
 }
 
 /**
- * Extract text content from a session/prompt result object.
- * Gemini ACP may return the full response in the result instead of streaming
- * it via agent_message_chunk notifications (especially in plan/read-only mode).
- */
-export function extractResultText(result) {
-  if (!result || typeof result !== "object") return "";
-
-  // Direct text field
-  if (typeof result.text === "string" && result.text) return result.text;
-
-  // Content array (MCP-style: [{ type: "text", text: "..." }])
-  if (Array.isArray(result.content)) {
-    return extractTextFromContent(result.content);
-  }
-
-  // Messages array (chat-style: [{ role: "...", content: [...] }])
-  if (Array.isArray(result.messages)) {
-    return result.messages
-      .map((m) => extractTextFromContent(m.content))
-      .join("");
-  }
-
-  return "";
-}
-
-function buildModelFailureResult(sessionId, model, resolvedModel, message, partialOutput = "") {
-  const alternatives = suggestAlternatives(resolvedModel);
-  const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
-  return {
-    ok: false,
-    rawOutput: partialOutput,
-    sessionId,
-    stopReason: null,
-    failureMessage: `${message}${suggestion}`
-  };
-}
-
-const DEFAULT_PROMPT_TIMEOUT_MS = 15 * 60 * 1000; // 15 minutes, same as old spawnSync default
-
-/**
- * Run a Gemini task via ACP.
+ * Run an Antigravity task via agy print mode.
  *
- * @param {string} cwd - working directory
+ * @param {string} cwd - working directory for agy
  * @param {object} options
  * @param {string}  options.prompt
- * @param {string}  [options.model]
+ * @param {string}  [options.model]    - alias or agy display label
  * @param {boolean} [options.write=true]
- * @param {string}  [options.resume]       - existing sessionId to resume
+ * @param {string}  [options.resume]   - existing conversation id to resume
  * @param {string}  [options.logFile]
  * @param {Function} [options.onProgress]
  * @param {object}  [options.env]
  * @param {string}  [options.jobId]
  * @param {string}  [options.workspaceRoot]
  * @param {number}  [options.timeoutMs]
+ * @param {boolean} [options.skipWriteDetection] - internal: review path is already isolated
+ * @param {string}  [options.binary]   - test override for the agy binary
  * @returns {Promise<{ok: boolean, rawOutput: string, sessionId: string|null, stopReason: string|null, failureMessage: string|null}>}
  */
-export async function runGeminiTask(cwd, options = {}) {
+export async function runAntigravityTask(cwd, options = {}) {
   const {
     prompt,
     model,
@@ -253,208 +247,232 @@ export async function runGeminiTask(cwd, options = {}) {
     env,
     jobId,
     workspaceRoot,
-    timeoutMs
+    timeoutMs,
+    skipWriteDetection = false,
+    binary
   } = options;
 
   const resolvedModel = resolveModel(model) ?? DEFAULT_MODEL;
-  const modeId = write ? "default" : "plan";
   const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
+  const agyLogFile = logFile
+    ? `${logFile}.agy.log`
+    : path.join(os.tmpdir(), `agy-print-${process.pid}-${Date.now()}.log`);
 
-  let client, sessionId;
-  try {
-    if (resume) {
-      ({ client, sessionId } = await resumeSession(resume, {
-        cwd, env, workspaceRoot: effectiveWorkspaceRoot, write, logFile,
-        modeId, model: resolvedModel
-      }));
-    } else {
-      ({ client, sessionId } = await createSession({
-        cwd, env, modeId, model: resolvedModel,
-        workspaceRoot: effectiveWorkspaceRoot, write, logFile
-      }));
+  const preStatus = !write && !skipWriteDetection ? captureGitStatus(cwd) : null;
+  const effectivePrompt = write ? prompt : `${READ_ONLY_GUARD}\n\n${prompt}`;
+
+  appendLogLine(logFile, resume ? `Resuming agy conversation ${resume}` : `Starting agy (${resolvedModel})`);
+  onProgress?.({ message: "agy running...", phase: "running" });
+
+  function persistConversationId(conversationId) {
+    if (jobId && effectiveWorkspaceRoot) {
+      try {
+        upsertJob(effectiveWorkspaceRoot, { id: jobId, sessionId: conversationId });
+      } catch {
+        // non-fatal — state write may fail in edge cases
+      }
     }
-  } catch (err) {
+  }
+
+  const stopWatching = watchConversationId(agyLogFile, persistConversationId);
+
+  let run;
+  try {
+    run = await runAgyPrint({
+      prompt: effectivePrompt,
+      modelLabel: resolvedModel,
+      conversationId: resume,
+      cwd,
+      env,
+      agyLogFile,
+      timeoutMs: timeoutMs ?? DEFAULT_PRINT_TIMEOUT_MS,
+      skipPermissions: write,
+      ...(binary ? { binary } : {})
+    });
+  } finally {
+    stopWatching();
+  }
+
+  if (run.stdout) {
+    appendLogBlock(logFile, "Final output", run.stdout);
+  }
+  if (run.conversationId) {
+    persistConversationId(run.conversationId);
+  }
+
+  if (run.spawnErrorMessage) {
     return {
       ok: false,
       rawOutput: "",
       sessionId: null,
-      stopReason: null,
-      failureMessage: err.message
+      stopReason: "error",
+      failureMessage: `Failed to start agy: ${run.spawnErrorMessage}`
     };
   }
 
-  // Track active task for SIGTERM-based cancellation
-  _activeTask = { client, sessionId };
-
-  // Persist sessionId immediately for graceful cancel support
-  if (jobId && effectiveWorkspaceRoot) {
-    try {
-      upsertJob(effectiveWorkspaceRoot, { id: jobId, sessionId });
-    } catch {
-      // non-fatal — state write may fail in edge cases
-    }
+  if (run.timedOut) {
+    const seconds = Math.round((timeoutMs ?? DEFAULT_PRINT_TIMEOUT_MS) / 1000);
+    return {
+      ok: false,
+      rawOutput: run.stdout,
+      sessionId: run.conversationId,
+      stopReason: "timeout",
+      failureMessage: `agy timed out after ${seconds}s.`
+    };
   }
 
-  const chunks = [];
-  const logWriter = createBufferedLogWriter(logFile);
+  if (run.modelFellBack) {
+    const requested = model ?? resolvedModel;
+    const alternatives = suggestAlternatives(run.resolvedModelLabel);
+    const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
+    return {
+      ok: false,
+      rawOutput: run.stdout,
+      sessionId: run.conversationId,
+      stopReason: "error",
+      failureMessage: `Model "${requested}" was not recognized by agy; it fell back to "${run.resolvedModelLabel}".${suggestion}`
+    };
+  }
 
-  client.setNotificationHandler((message) => {
-    if (message.method !== "session/update") {
-      return;
-    }
-    const params = message.params;
-    if (params?.sessionId !== sessionId) {
-      return;
-    }
-    const update = params?.update;
-    if (!update) {
-      return;
-    }
-
-    if (update.sessionUpdate === "agent_message_chunk" && update.content?.text) {
-      chunks.push(update.content.text);
-      logWriter.write(update.content.text);
-      onProgress?.({ message: update.content.text, phase: "streaming" });
-    } else if (update.sessionUpdate === "tool_call") {
-      logWriter.flush();
-      const toolName = update.name ?? "tool";
-      appendLogLine(logFile, `[tool_call] ${toolName}`);
-      onProgress?.({ message: `Running: ${toolName}`, phase: "tool_call" });
-    }
-  });
-
-  const promptTimeoutMs = timeoutMs ?? DEFAULT_PROMPT_TIMEOUT_MS;
-
-  let result;
-  try {
-    result = await withTimeout(
-      client.request("session/prompt", {
-        sessionId,
-        prompt: [{ type: "text", text: prompt }]
-      }),
-      promptTimeoutMs, "Gemini prompt"
-    );
-  } catch (err) {
-    logWriter.flush();
-    // On timeout, try graceful cancel before closing
-    try { client.notify("session/cancel", { sessionId }); } catch {}
-    await client.close().catch(() => {});
-    _activeTask = null;
-    const msg = err?.message ?? String(err);
-    const partialOutput = chunks.join("");
-
-    if (/429|RESOURCE_EXHAUSTED|capacity|rate.limit/i.test(msg)) {
-      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" hit rate limits.`, partialOutput);
-    }
-    if (/malformed function call/i.test(msg)) {
-      return buildModelFailureResult(sessionId, model, resolvedModel, `Model "${model ?? "default"}" returned malformed output.`, partialOutput);
+  if (run.exitCode !== 0) {
+    const haystack = `${run.stderr}\n${readAgyLog(agyLogFile).slice(-4096)}`;
+    let failureMessage;
+    if (RATE_LIMIT_RE.test(haystack)) {
+      const alternatives = suggestAlternatives(resolvedModel);
+      const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
+      failureMessage = `Model "${model ?? "default"}" hit rate limits.${suggestion}`;
+    } else if (AUTH_FAILURE_RE.test(haystack)) {
+      failureMessage = "agy is not authenticated. Run agy interactively once and complete sign-in.";
+    } else {
+      const detail = run.stderr.trim().slice(0, 500);
+      failureMessage = detail
+        ? `agy exited with code ${run.exitCode}: ${detail}`
+        : `agy exited with code ${run.exitCode}.`;
     }
     return {
       ok: false,
-      rawOutput: partialOutput,
-      sessionId,
-      stopReason: null,
-      failureMessage: msg
+      rawOutput: run.stdout,
+      sessionId: run.conversationId,
+      stopReason: "error",
+      failureMessage
     };
   }
 
-  logWriter.flush();
-  await client.close().catch(() => {});
-  _activeTask = null;
+  let rawOutput = run.stdout;
 
-  const stopReason = result?.stopReason ?? "unknown";
-  const isSuccess = stopReason === "end_turn";
-
-  // Prefer streamed chunks; fall back to extracting text from the prompt result
-  // (Gemini ACP may return full content in the response instead of streaming)
-  let rawOutput = chunks.join("");
-  if (!rawOutput) {
-    rawOutput = extractResultText(result);
+  if (preStatus != null) {
+    const delta = detectWorkingTreeDelta(preStatus, captureGitStatus(cwd));
+    if (delta.length > 0) {
+      const warning = [
+        "WARNING: this read-only task modified the working tree:",
+        ...delta.map((line) => `  ${line}`),
+        "Review these changes with `git status` / `git diff` and revert anything unwanted.",
+        ""
+      ].join("\n");
+      rawOutput = `${warning}\n${rawOutput}`;
+      appendLogLine(logFile, `read-only violation: ${delta.length} path(s) changed`);
+    }
   }
 
   return {
-    ok: isSuccess,
+    ok: true,
     rawOutput,
-    sessionId,
-    stopReason,
-    failureMessage: isSuccess ? null : `Gemini turn ended with stop reason: ${stopReason}`
+    sessionId: run.conversationId,
+    stopReason: "end_turn",
+    failureMessage: null
   };
 }
 
 // ---------------------------------------------------------------------------
-// Async ACP-based review execution
+// Review execution (worktree-isolated)
 // ---------------------------------------------------------------------------
 
 /**
- * Run a Gemini review via ACP (read-only mode).
+ * Run an Antigravity review. The review context is fully embedded in the
+ * prompt; agy executes inside a disposable git worktree mirroring the working
+ * state, so the model can read repo files while stray writes land in the
+ * throwaway worktree.
  *
- * @param {string} cwd - working directory
- * @param {object} options
- * @param {string}  options.prompt
- * @param {string}  [options.model]
- * @param {number}  [options.timeoutMs]
- * @param {string}  [options.logFile]
- * @param {Function} [options.onProgress]
- * @param {object}  [options.env]
- * @param {string}  [options.workspaceRoot]
  * @returns {Promise<{ok: boolean, parsed: object|null, parseError: string|null, rawOutput: string, sessionId: string|null, reasoningSummary: string|null}>}
  */
-export async function runGeminiReview(cwd, options = {}) {
-  const {
-    prompt,
-    model,
-    timeoutMs,
-    logFile,
-    onProgress,
-    env,
-    workspaceRoot,
-    jobId
-  } = options;
+export async function runAntigravityReview(cwd, options = {}) {
+  const { prompt, model, timeoutMs, logFile, onProgress, env, workspaceRoot, jobId, binary } = options;
+  const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
 
-  // Reviews are always read-only (write: false)
-  const taskResult = await runGeminiTask(cwd, {
-    prompt, model, write: false, logFile, onProgress, env, workspaceRoot,
-    timeoutMs, jobId
-  });
+  try {
+    sweepOrphanedWorktrees(effectiveWorkspaceRoot);
+  } catch {
+    // best-effort housekeeping
+  }
+
+  let isolation = null;
+  let isolationNote = null;
+  try {
+    isolation = createReviewWorktree(effectiveWorkspaceRoot, jobId ?? null);
+    for (const warning of isolation.warnings) {
+      appendLogLine(logFile, `worktree: ${warning}`);
+    }
+  } catch (err) {
+    appendLogLine(logFile, `worktree creation failed: ${err.message}`);
+    isolationNote =
+      "Note: the reviewer had no repository file access (worktree creation failed); findings are based on the embedded diff context only.";
+  }
+
+  const execCwd = isolation ? isolation.path : createTempDir("agy-review-");
+
+  let taskResult;
+  try {
+    taskResult = await runAntigravityTask(execCwd, {
+      prompt,
+      model,
+      write: false,
+      skipWriteDetection: true,
+      logFile,
+      onProgress,
+      env,
+      workspaceRoot: effectiveWorkspaceRoot,
+      timeoutMs,
+      jobId,
+      ...(binary ? { binary } : {})
+    });
+  } finally {
+    if (isolation) {
+      isolation.cleanup();
+    } else {
+      try {
+        fs.rmSync(execCwd, { recursive: true, force: true });
+      } catch {
+        // best effort
+      }
+    }
+  }
+
+  const rawOutput = stripPathPrefix(taskResult.rawOutput, execCwd);
 
   if (!taskResult.ok) {
     return {
       ok: false,
       parsed: null,
       parseError: taskResult.failureMessage,
-      rawOutput: taskResult.rawOutput,
+      rawOutput,
       sessionId: taskResult.sessionId,
       reasoningSummary: null
     };
   }
 
-  const structuredResult = parseStructuredOutput(taskResult.rawOutput);
+  const structured = parseStructuredOutput(rawOutput);
+  if (isolationNote) {
+    if (structured.parsed && typeof structured.parsed.summary === "string") {
+      structured.parsed.summary = `${isolationNote} ${structured.parsed.summary}`;
+    } else {
+      structured.rawOutput = `${isolationNote}\n\n${structured.rawOutput}`;
+    }
+  }
 
   return {
     ok: true,
-    ...structuredResult,
+    ...structured,
     sessionId: taskResult.sessionId,
     reasoningSummary: null
   };
-}
-
-// ---------------------------------------------------------------------------
-// Session interruption
-// ---------------------------------------------------------------------------
-
-/**
- * Interrupt / cancel a running ACP session.
- *
- * Cancellation is handled via SIGTERM: the background worker process traps
- * SIGTERM (via installShutdownHandler) and sends session/cancel on its own
- * active ACP connection. Callers should use terminateProcessTree(pid) on the
- * worker PID instead of calling this function.
- *
- * This function is kept as a no-op for backward compatibility but does nothing
- * useful — a fresh ACP client cannot reach another process's session.
- *
- * @deprecated Use terminateProcessTree on the worker PID instead.
- */
-export async function interruptSession(_sessionId, _opts = {}) {
-  // Intentional no-op. Cancellation is now handled by SIGTERM → installShutdownHandler.
 }

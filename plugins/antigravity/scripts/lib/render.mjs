@@ -172,14 +172,13 @@ function appendReasoningSection(lines, reasoningSummary) {
 
 export function renderSetupReport(report) {
   const lines = [
-    "# Gemini Setup",
+    "# Antigravity Setup",
     "",
     `Status: ${report.ready ? "ready" : "needs attention"}`,
     "",
     "Checks:",
     `- node: ${report.node.detail}`,
-    `- npm: ${report.npm.detail}`,
-    `- gemini: ${report.gemini.detail}`,
+    `- agy: ${report.agy.detail}`,
     `- auth: ${report.auth.detail}`,
     `- session runtime: ${report.sessionRuntime.label}`,
     `- review gate: ${report.reviewGateEnabled ? "enabled" : "disabled"}`,

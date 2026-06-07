@@ -13,33 +13,31 @@ describe("renderSetupReport", () => {
     const output = renderSetupReport({
       ready: true,
       node: { available: true, detail: "v22.0.0" },
-      npm: { available: true, detail: "10.0.0" },
-      gemini: { available: true, detail: "0.36.0" },
-      auth: { available: true, loggedIn: true, detail: "authenticated (Google OAuth)" },
+      agy: { available: true, detail: "1.0.6" },
+      auth: { available: true, loggedIn: true, detail: "authenticated (Google account)" },
       sessionRuntime: { label: "direct" },
       reviewGateEnabled: false,
       actionsTaken: [],
       nextSteps: []
     });
-    assert.ok(output.includes("# Gemini Setup"));
+    assert.ok(output.includes("# Antigravity Setup"));
     assert.ok(output.includes("Status: ready"));
-    assert.ok(output.includes("gemini: 0.36.0"));
+    assert.ok(output.includes("agy: 1.0.6"));
   });
 
   it("renders needs-attention status", () => {
     const output = renderSetupReport({
       ready: false,
       node: { available: true, detail: "v22.0.0" },
-      npm: { available: true, detail: "10.0.0" },
-      gemini: { available: false, detail: "not found" },
-      auth: { available: false, loggedIn: false, detail: "gemini not installed" },
+      agy: { available: false, detail: "not found" },
+      auth: { available: false, loggedIn: false, detail: "agy not installed" },
       sessionRuntime: { label: "direct" },
       reviewGateEnabled: false,
       actionsTaken: [],
-      nextSteps: ["Install Gemini CLI"]
+      nextSteps: ["Install the Antigravity CLI (agy): https://antigravity.google"]
     });
     assert.ok(output.includes("Status: needs attention"));
-    assert.ok(output.includes("Install Gemini CLI"));
+    assert.ok(output.includes("Install the Antigravity CLI"));
   });
 });
 

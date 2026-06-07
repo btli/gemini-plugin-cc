@@ -7,7 +7,7 @@ import { terminateProcessTree } from "./lib/process.mjs";
 import { loadState, resolveStateFile, saveState } from "./lib/state.mjs";
 import { resolveWorkspaceRoot } from "./lib/workspace.mjs";
 
-export const SESSION_ID_ENV = "GEMINI_COMPANION_SESSION_ID";
+export const SESSION_ID_ENV = "ANTIGRAVITY_COMPANION_SESSION_ID";
 const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
 
 function readHookInput() {

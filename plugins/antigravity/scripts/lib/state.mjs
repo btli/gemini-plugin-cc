@@ -5,7 +5,7 @@ import path from "node:path";
 
 const STATE_VERSION = 1;
 const MAX_JOBS = 50;
-const FALLBACK_STATE_ROOT_DIR = "gemini-companion";
+const FALLBACK_STATE_ROOT_DIR = "antigravity-companion";
 const PLUGIN_DATA_ENV = "CLAUDE_PLUGIN_DATA";
 
 function defaultStateRootDir() {

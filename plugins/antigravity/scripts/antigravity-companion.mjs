@@ -15,10 +15,10 @@ import {
   resolveReviewTarget
 } from "./lib/git.mjs";
 import {
-  getGeminiAvailability,
-  getGeminiAuthStatus,
-  runGeminiReview,
-  runGeminiTask,
+  getAntigravityAvailability,
+  getAntigravityAuthStatus,
+  runAntigravityReview,
+  runAntigravityTask,
   readOutputSchema,
   findLatestTaskSession,
   installShutdownHandler
@@ -78,16 +78,16 @@ function handleSetup(cwd, argv) {
   }
 
   const nodeStatus = binaryAvailable("node");
-  const npmStatus = binaryAvailable("npm");
-  const geminiStatus = getGeminiAvailability(cwd);
-  const authStatus = geminiStatus.available ? getGeminiAuthStatus() : { available: false, loggedIn: false, detail: "gemini not installed" };
+  const agyStatus = getAntigravityAvailability(cwd);
+  const authStatus = agyStatus.available
+    ? getAntigravityAuthStatus()
+    : { available: false, loggedIn: false, detail: "agy not installed" };
   const config = getConfig(workspaceRoot);
 
   const report = {
-    ready: geminiStatus.available && authStatus.loggedIn,
+    ready: agyStatus.available && authStatus.loggedIn,
     node: nodeStatus,
-    npm: npmStatus,
-    gemini: geminiStatus,
+    agy: agyStatus,
     auth: authStatus,
     sessionRuntime: { label: "direct" },
     reviewGateEnabled: Boolean(config.stopReviewGate),
@@ -95,14 +95,11 @@ function handleSetup(cwd, argv) {
     nextSteps: []
   };
 
-  if (!geminiStatus.available && npmStatus.available) {
-    report.nextSteps.push("Install Gemini CLI: npm install -g @google/gemini-cli");
-  } else if (!geminiStatus.available) {
-    report.nextSteps.push("Install Gemini CLI: see https://github.com/google-gemini/gemini-cli");
+  if (!agyStatus.available) {
+    report.nextSteps.push("Install the Antigravity CLI (agy): https://antigravity.google");
   }
-
-  if (geminiStatus.available && !authStatus.loggedIn) {
-    report.nextSteps.push("Authenticate: run !gemini auth login");
+  if (agyStatus.available && !authStatus.loggedIn) {
+    report.nextSteps.push("Authenticate: run agy interactively once and complete sign-in");
   }
 
   const output = options.json ? JSON.stringify(report, null, 2) : renderSetupReport(report);
@@ -149,7 +146,7 @@ async function executeReviewForeground(cwd, target, kind, options = {}) {
   const { prompt, targetLabel } = buildReviewPrompt(cwd, target, kind, options.focusText);
   const reviewLabel = kind === "adversarial-review" ? "Adversarial Review" : "Review";
 
-  const result = await runGeminiReview(cwd, {
+  const result = await runAntigravityReview(cwd, {
     prompt,
     model: options.model,
     timeoutMs: options.timeoutMs,
@@ -242,7 +239,7 @@ async function handleReviewWorker(cwd, argv) {
   const { prompt, targetLabel } = buildReviewPrompt(workerCwd, target, kind, options.focus);
   const reviewLabel = kind === "adversarial-review" ? "Adversarial Review" : "Review";
 
-  const result = await runGeminiReview(workerCwd, {
+  const result = await runAntigravityReview(workerCwd, {
     prompt,
     model: options.model,
     workspaceRoot,
@@ -395,7 +392,7 @@ async function executeTask(cwd, prompt, options = {}) {
   }
 
   // Foreground
-  const result = await runGeminiTask(cwd, { prompt, model, write, resume });
+  const result = await runAntigravityTask(cwd, { prompt, model, write, resume });
   const output = renderTaskResult(result);
 
   if (options.json) {
@@ -420,7 +417,7 @@ async function handleTaskWorker(cwd, argv) {
 
   const jobRecord = listJobs(workspaceRoot).find((j) => j.id === jobId);
 
-  const result = await runGeminiTask(workerCwd, {
+  const result = await runAntigravityTask(workerCwd, {
     prompt: options.prompt,
     model: options.model,
     write,
