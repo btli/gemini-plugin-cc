@@ -31,12 +31,6 @@ function validateReviewResultShape(data) {
   if (typeof data.summary !== "string" || !data.summary.trim()) {
     return "Missing string `summary`.";
   }
-  if (!Array.isArray(data.findings)) {
-    return "Missing array `findings`.";
-  }
-  if (!Array.isArray(data.next_steps)) {
-    return "Missing array `next_steps`.";
-  }
   return null;
 }
 
@@ -60,11 +54,13 @@ function normalizeReviewFinding(finding, index) {
 }
 
 function normalizeReviewResultData(data) {
+  const findings = Array.isArray(data.findings) ? data.findings : [];
+  const nextSteps = Array.isArray(data.next_steps) ? data.next_steps : [];
   return {
     verdict: data.verdict.trim(),
     summary: data.summary.trim(),
-    findings: data.findings.map((finding, index) => normalizeReviewFinding(finding, index)),
-    next_steps: data.next_steps
+    findings: findings.map((finding, index) => normalizeReviewFinding(finding, index)),
+    next_steps: nextSteps
       .filter((step) => typeof step === "string" && step.trim())
       .map((step) => step.trim())
   };

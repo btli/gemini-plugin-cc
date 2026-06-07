@@ -146,6 +146,19 @@ async function executeReviewForeground(cwd, target, kind, options = {}) {
   const { prompt, targetLabel } = buildReviewPrompt(cwd, target, kind, options.focusText);
   const reviewLabel = kind === "adversarial-review" ? "Adversarial Review" : "Review";
 
+  // Guard: if the review context contains no actual diff/changes, return
+  // a clean "no changes" result instead of sending a near-empty prompt to
+  // the model (which can reject it as an invalid request).
+  const hasChanges = /^## (Staged changes|Unstaged changes|Untracked files|Diff|Commits)/m.test(prompt);
+  if (!hasChanges) {
+    const output = renderReviewResult(
+      { parsed: { verdict: "approve", summary: "No code changes or material issues were found in the provided diff.", findings: [] }, parseError: null, rawOutput: null },
+      { reviewLabel, targetLabel, reasoningSummary: null }
+    );
+    process.stdout.write(output);
+    return;
+  }
+
   const result = await runAntigravityReview(cwd, {
     prompt,
     model: options.model,
@@ -611,7 +624,15 @@ async function main() {
   }
 }
 
-main().catch((err) => {
-  process.stderr.write(`${err.message}\n`);
-  process.exitCode = 1;
-});
+main()
+  .catch((err) => {
+    process.stderr.write(`${err.message}\n`);
+    process.exitCode = 1;
+  })
+  .finally(() => {
+    // Defensive fail-safe: explicitly exit so a stray child handle (e.g.
+    // a leftover stream listener on a zombie agy process) cannot keep the
+    // event loop alive forever. main() has already finished by this point;
+    // anything still pending is a leak we can safely abandon.
+    process.exit(process.exitCode ?? 0);
+  });
