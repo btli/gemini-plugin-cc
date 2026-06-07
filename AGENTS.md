@@ -64,9 +64,9 @@ plugins/antigravity/
 
 Model IDs are agy display labels (the only form `agy --model` resolves):
 
-- `pro` → `Gemini 3.1 Pro (High)` (default)
+- `pro` / `pro-high` → `Gemini 3.1 Pro (High)` (default)
 - `pro-low` → `Gemini 3.1 Pro (Low)`
-- `flash` → `Gemini 3.5 Flash (High)`
+- `flash` / `flash-high` → `Gemini 3.5 Flash (High)`
 - `flash-medium` → `Gemini 3.5 Flash (Medium)`
 - `flash-low` → `Gemini 3.5 Flash (Low)`
 - `sonnet` → `Claude Sonnet 4.6 (Thinking)`

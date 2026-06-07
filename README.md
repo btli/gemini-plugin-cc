@@ -3,8 +3,7 @@
 Use Antigravity (agy) from inside Claude Code for code reviews or to delegate tasks.
 
 This plugin is for Claude Code users who want an easy way to use Google's Antigravity
-models from the workflow they already have. It replaces the deprecated
-[gemini-plugin-cc](https://github.com/btli/gemini-plugin-cc) Gemini CLI integration.
+models from the workflow they already have. This is the 2.0 rebrand of gemini-plugin-cc — the deprecated Gemini CLI backend was replaced with Antigravity's `agy`.
 
 ## What You Get
 
@@ -225,9 +224,9 @@ The default model is `Gemini 3.1 Pro (High)`. Pass `--model <alias>` to any revi
 
 | Alias | Model |
 |---|---|
-| `pro` (default) | Gemini 3.1 Pro (High) |
+| `pro` / `pro-high` (default) | Gemini 3.1 Pro (High) |
 | `pro-low` | Gemini 3.1 Pro (Low) |
-| `flash` | Gemini 3.5 Flash (High) |
+| `flash` / `flash-high` | Gemini 3.5 Flash (High) |
 | `flash-medium` | Gemini 3.5 Flash (Medium) |
 | `flash-low` | Gemini 3.5 Flash (Low) |
 | `sonnet` | Claude Sonnet 4.6 (Thinking) |
@@ -266,7 +265,7 @@ Then check in with:
 
 ## Architecture
 
-This plugin mirrors the design of the official [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc), adapted for Google's Antigravity ecosystem.
+This plugin mirrors the design of OpenAI's [codex-plugin-cc](https://github.com/openai/codex-plugin-cc), adapted for Google's Antigravity ecosystem.
 
 | | Codex plugin | Antigravity plugin |
 |---|---|---|
