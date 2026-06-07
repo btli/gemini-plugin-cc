@@ -1,5 +1,5 @@
 ---
-description: Show the final stored Gemini output for a finished job
+description: Show the final stored Antigravity output for a finished job
 argument-hint: '[job-id]'
 disable-model-invocation: true
 allowed-tools: Bash(node:*)
@@ -13,7 +13,7 @@ Present the complete, unmodified command output to the user, including:
 - The full result payload without condensation
 - Any file references with exact line numbers
 - Any errors encountered
-- Suggested follow-up commands like `/gemini:status` and `/gemini:review`
-- Gemini session ID for resuming in Gemini CLI with `gemini --resume <session-id>`
+- Suggested follow-up commands like `/antigravity:status` and `/antigravity:review`
+- agy conversation ID for resuming in the Antigravity CLI with `agy --conversation <conversation-id>`
 
 Do not summarize or condense the findings.

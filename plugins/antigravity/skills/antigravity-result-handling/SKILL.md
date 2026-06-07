@@ -1,8 +1,8 @@
 ---
-description: Internal guidance for presenting Gemini helper output to the user. Covers review results, task output, and error handling.
+description: Internal guidance for presenting Antigravity helper output to the user. Covers review results, task output, and error handling.
 ---
 
-# Gemini Result Handling
+# Antigravity Result Handling
 
 ## Preservation rules
 
@@ -18,17 +18,17 @@ The user must explicitly approve which issues to address before any modification
 
 ## Error handling
 
-- Report failed or incomplete Gemini runs without attempting Claude-side workarounds.
+- Report failed or incomplete Antigravity runs without attempting Claude-side workarounds.
 - Include actionable stderr output when setup or authentication issues arise.
-- Direct users to `/gemini:setup` for authentication rather than improvising alternatives.
+- Direct users to `/antigravity:setup` for authentication rather than improvising alternatives.
 
 ## Output rules
 
 - Present requested sections: observed facts, open questions, touched files.
 - State explicitly when no findings exist.
-- List modified files when Gemini makes edits.
-- When a Gemini session ID is available, include it so the user can resume with `gemini --resume <session-id>`.
+- List modified files when Antigravity makes edits.
+- When an agy conversation ID is available, include it so the user can resume with `agy --conversation <conversation-id>`.
 
 ## Overriding principle
 
-Communicate Gemini's output faithfully, avoid auto-fixing, and obtain user consent before any code modifications.
+Communicate Antigravity's output faithfully, avoid auto-fixing, and obtain user consent before any code modifications.

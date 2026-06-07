@@ -1,10 +1,10 @@
 ---
-description: Internal helper contract for invoking the gemini-companion runtime from Claude Code. Used exclusively within the gemini:gemini-rescue subagent.
+description: Internal helper contract for invoking the antigravity-companion runtime from Claude Code. Used exclusively within the antigravity:antigravity-rescue subagent.
 ---
 
-# Gemini CLI Runtime
+# Antigravity CLI Runtime
 
-This skill describes the internal contract for invoking the Gemini companion runtime.
+This skill describes the internal contract for invoking the Antigravity companion runtime.
 
 ## Primary helper
 
@@ -20,7 +20,7 @@ node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" task "<raw argume
 - Do NOT call `setup`, `review`, `adversarial-review`, `status`, `result`, or `cancel` from within rescue.
 - Strip `--background` and `--wait` from the task text and pass them as flags.
 - Leave `--model` unset unless the user explicitly requests a specific model.
-- Model aliases: `flash` → `gemini-3-flash-preview`, `pro` → `gemini-3.1-pro-preview`, `auto` → `auto-gemini-3`.
+- Model aliases: `pro` → `Gemini 3.1 Pro (High)` (default), `pro-low` → `Gemini 3.1 Pro (Low)`, `flash` → `Gemini 3.5 Flash (High)`, `flash-medium` / `flash-low` → the lower Flash tiers, `sonnet` / `opus` → Claude 4.6 (Thinking), `gpt-oss` → `GPT-OSS 120B (Medium)`.
 - Default to write-capable runs by adding `--write` unless the user asks for read-only.
 - `--resume` triggers `task --resume-last`.
 - `--fresh` starts a clean `task` run.

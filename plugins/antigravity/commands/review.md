@@ -1,10 +1,10 @@
 ---
-description: Run a Gemini code review on your current work
+description: Run an Antigravity code review on your current work
 argument-hint: '[--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--wait] [--background]'
 allowed-tools: Bash(node:*), AskUserQuestion
 ---
 
-This command runs a code review through Gemini CLI.
+This command runs a code review through the Antigravity CLI (agy).
 
 Parse the user's arguments. Supported flags: `--base <ref>`, `--scope <auto|working-tree|branch>`, `--model <model>`, `--wait`, `--background`.
 
@@ -26,7 +26,7 @@ Run without waiting:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" review --background $ARGUMENTS
 ```
 
-Tell the user the job was started and to check `/gemini:status` for progress.
+Tell the user the job was started and to check `/antigravity:status` for progress.
 
 **Default (no flag):**
 Estimate the review scope by running:
@@ -43,6 +43,6 @@ Use `AskUserQuestion` to let the user pick foreground or background.
 
 ## Constraints
 
-- This is review-only. Do not fix issues, apply patches, or suggest that you are about to make changes.
-- This does not support staged-only review, unstaged-only review, or extra focus text. Use `/gemini:adversarial-review` when you want custom instructions.
-- Present the Gemini output exactly as returned.
+- This is review-only. The review runs in a disposable git worktree, so it cannot modify your working tree. Do not fix issues, apply patches, or suggest that you are about to make changes.
+- This does not support staged-only review, unstaged-only review, or extra focus text. Use `/antigravity:adversarial-review` when you want custom instructions.
+- Present the Antigravity output exactly as returned.

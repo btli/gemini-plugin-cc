@@ -1,6 +1,6 @@
 # Prompt Blocks
 
-Reusable XML-wrapped blocks for structuring Gemini prompts.
+Reusable XML-wrapped blocks for structuring Antigravity prompts.
 
 ## Core Wrapper
 

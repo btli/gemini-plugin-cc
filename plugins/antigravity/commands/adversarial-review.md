@@ -1,10 +1,10 @@
 ---
-description: Run a steerable adversarial Gemini review that challenges your implementation choices
+description: Run a steerable adversarial Antigravity review that challenges your implementation choices
 argument-hint: '[--base <ref>] [--scope auto|working-tree|branch] [--model <model>] [--wait] [--background] [focus text...]'
 allowed-tools: Bash(node:*), AskUserQuestion
 ---
 
-This command runs a challenge review through Gemini that questions the chosen implementation, design choices, tradeoffs, and assumptions.
+This command runs a challenge review through Antigravity (agy) that questions the chosen implementation, design choices, tradeoffs, and assumptions.
 
 Parse the user's arguments. Supported flags: `--base <ref>`, `--scope <auto|working-tree|branch>`, `--model <model>`, `--wait`, `--background`. Everything after the flags is focus text.
 
@@ -26,7 +26,7 @@ Run without waiting:
 node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" adversarial-review --background $ARGUMENTS
 ```
 
-Tell the user the job was started and to check `/gemini:status`.
+Tell the user the job was started and to check `/antigravity:status`.
 
 **Default:**
 Estimate scope by checking git status and diff stats.
@@ -35,5 +35,5 @@ Use `AskUserQuestion` to let the user choose.
 
 ## Constraints
 
-- This is review-only. Do not fix issues, apply patches, or suggest that you are about to make changes.
-- Present the Gemini output exactly as returned.
+- This is review-only. The review runs in a disposable git worktree, so it cannot modify your working tree. Do not fix issues, apply patches, or suggest that you are about to make changes.
+- Present the Antigravity output exactly as returned.

@@ -1,6 +1,6 @@
-# Gemini Prompt Recipes
+# Antigravity Prompt Recipes
 
-Use these as starting templates for Gemini task prompts.
+Use these as starting templates for Antigravity task prompts.
 Copy the smallest recipe that fits, then trim anything you do not need.
 
 ## Diagnosis
