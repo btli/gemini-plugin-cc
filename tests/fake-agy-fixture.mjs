@@ -40,7 +40,7 @@ const REVIEW_JSON = JSON.stringify({
  * and emits behavior-dependent stdout/exit codes.
  *
  * Behaviors: task-ok | review-ok | echo-args | model-fallback | fail |
- *            rate-limit | auth-error | hang
+ *            rate-limit | auth-error | hang | write-file
  * The FAKE_AGY_BEHAVIOR env var overrides the baked-in behavior at run time.
  */
 function generateScript(behavior) {
@@ -114,6 +114,10 @@ if (BEHAVIOR === 'hang') {
   process.exit(0);
 } else if (BEHAVIOR === 'echo-args') {
   process.stdout.write(JSON.stringify({ args: args, prompt: prompt }));
+  process.exit(0);
+} else if (BEHAVIOR === 'write-file') {
+  fs.writeFileSync('agy-wrote.txt', 'stray write', 'utf8');
+  process.stdout.write('TASK_COMPLETE: wrote file');
   process.exit(0);
 } else {
   process.stdout.write('TASK_COMPLETE: ' + prompt.slice(0, 60).replace(/\\n/g, ' '));

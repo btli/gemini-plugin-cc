@@ -393,6 +393,27 @@ async function executeTask(cwd, prompt, options = {}) {
 
   // Foreground
   const result = await runAntigravityTask(cwd, { prompt, model, write, resume });
+
+  // Persist the conversation id so --resume-last works after foreground runs too
+  if (result.sessionId) {
+    try {
+      upsertJob(workspaceRoot, {
+        id: generateJobId(),
+        kind: "task",
+        jobClass: "task",
+        status: result.ok ? "completed" : "failed",
+        title: prompt.slice(0, 80),
+        sessionId: result.sessionId,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+        completedAt: nowIso(),
+        write
+      });
+    } catch {
+      // non-fatal — resume hint is best-effort
+    }
+  }
+
   const output = renderTaskResult(result);
 
   if (options.json) {
@@ -512,8 +533,8 @@ async function handleCancel(cwd, argv) {
   if (job.pid) {
     try {
       // Send SIGTERM to just the worker PID (not the process group) so the
-      // worker's installShutdownHandler can gracefully cancel the ACP session
-      // before the transport dies. On Windows, fall through to terminateProcessTree.
+      // worker's installShutdownHandler can SIGTERM the agy subprocess for
+      // graceful conversation cleanup before it exits. On Windows, fall through to terminateProcessTree.
       if (process.platform !== "win32") {
         process.kill(job.pid, "SIGTERM");
         // Give the worker up to 3s to cancel the session, persist results, and exit

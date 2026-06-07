@@ -37,6 +37,9 @@ export function installShutdownHandler() {
     const killed = killActiveAgyChild("SIGTERM");
     if (!killed) {
       // No active agy run — exit directly.
+      // Exiting here (no active agy child) bypasses any in-flight finally blocks,
+      // e.g. review worktree cleanup during creation/mirroring. That orphan is
+      // bounded: sweepOrphanedWorktrees reclaims it on the next review (24h gate).
       process.exit(143);
     }
   };
@@ -191,8 +194,8 @@ const CONVERSATION_WATCH_INTERVAL_MS = 500;
 
 /**
  * Poll the agy log for the conversation id while the run is in flight, so a
- * hard-killed worker still leaves a resumable id in job state (parity with
- * the old "persist sessionId immediately" ACP behavior).
+ * hard-killed worker still leaves a resumable id in job state (matching the
+ * previous backend's persist-immediately behavior).
  */
 function watchConversationId(agyLogFile, onFound) {
   if (!agyLogFile) {
@@ -256,8 +259,9 @@ export async function runAntigravityTask(cwd, options = {}) {
   const effectiveWorkspaceRoot = workspaceRoot ?? resolveWorkspaceRoot(cwd);
   const agyLogFile = logFile
     ? `${logFile}.agy.log`
-    : path.join(os.tmpdir(), `agy-print-${process.pid}-${Date.now()}.log`);
+    : path.join(os.tmpdir(), `agy-print-${process.pid}-${Date.now()}.log`); // foreground runs leave this small glog in tmp; OS tmp-cleaning reclaims it
 
+  // Non-git cwd → captureGitStatus returns null and write-detection is skipped (no baseline).
   const preStatus = !write && !skipWriteDetection ? captureGitStatus(cwd) : null;
   const effectivePrompt = write ? prompt : `${READ_ONLY_GUARD}\n\n${prompt}`;
 
@@ -322,15 +326,15 @@ export async function runAntigravityTask(cwd, options = {}) {
   }
 
   if (run.modelFellBack) {
-    const requested = model ?? resolvedModel;
     const alternatives = suggestAlternatives(run.resolvedModelLabel);
     const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
+    const requestedNote = model && resolveModel(model) !== model ? ` (requested via "${model}")` : "";
     return {
       ok: false,
       rawOutput: run.stdout,
       sessionId: run.conversationId,
       stopReason: "error",
-      failureMessage: `Model "${requested}" was not recognized by agy; it fell back to "${run.resolvedModelLabel}".${suggestion}`
+      failureMessage: `Model "${resolvedModel}" is unavailable in this agy build${requestedNote}; it fell back to "${run.resolvedModelLabel}".${suggestion}`
     };
   }
 
@@ -340,7 +344,7 @@ export async function runAntigravityTask(cwd, options = {}) {
     if (RATE_LIMIT_RE.test(haystack)) {
       const alternatives = suggestAlternatives(resolvedModel);
       const suggestion = alternatives.length > 0 ? ` Try: --model ${alternatives[0]}` : "";
-      failureMessage = `Model "${model ?? "default"}" hit rate limits.${suggestion}`;
+      failureMessage = `Model "${resolvedModel}" hit rate limits.${suggestion}`;
     } else if (AUTH_FAILURE_RE.test(haystack)) {
       failureMessage = "agy is not authenticated. Run agy interactively once and complete sign-in.";
     } else {

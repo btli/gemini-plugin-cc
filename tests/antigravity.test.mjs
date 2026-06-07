@@ -4,8 +4,11 @@ import assert from "node:assert/strict";
 import {
   parseStructuredOutput,
   stripPathPrefix,
-  detectWorkingTreeDelta
+  detectWorkingTreeDelta,
+  runAntigravityTask
 } from "../plugins/antigravity/scripts/lib/antigravity.mjs";
+import { createTempDir, cleanTempDir, initGitRepo } from "./helpers.mjs";
+import { installFakeAgy } from "./fake-agy-fixture.mjs";
 
 describe("parseStructuredOutput", () => {
   it("parses direct JSON", () => {
@@ -75,5 +78,81 @@ describe("detectWorkingTreeDelta", () => {
   it("returns empty when either snapshot is unavailable", () => {
     assert.deepEqual(detectWorkingTreeDelta(null, "?? x\n"), []);
     assert.deepEqual(detectWorkingTreeDelta("?? x\n", null), []);
+  });
+});
+
+describe("runAntigravityTask failure branches", () => {
+  it("reports model fallback with the resolved label and alias note", async () => {
+    const binDir = createTempDir("facade-test-");
+    try {
+      const agyPath = installFakeAgy(binDir, "model-fallback");
+      const result = await runAntigravityTask(binDir, {
+        prompt: "x",
+        model: "pro",
+        binary: agyPath,
+        timeoutMs: 10_000
+      });
+      assert.equal(result.ok, false);
+      assert.equal(result.stopReason, "error");
+      assert.ok(result.failureMessage.includes('Model "Gemini 3.1 Pro (High)" is unavailable'));
+      assert.ok(result.failureMessage.includes('(requested via "pro")'));
+      assert.ok(result.failureMessage.includes('fell back to "Gemini 3.5 Flash (Medium)"'));
+    } finally {
+      cleanTempDir(binDir);
+    }
+  });
+
+  it("maps rate-limit stderr to a rate-limit failure message", async () => {
+    const binDir = createTempDir("facade-test-");
+    try {
+      const agyPath = installFakeAgy(binDir, "rate-limit");
+      const result = await runAntigravityTask(binDir, {
+        prompt: "x",
+        binary: agyPath,
+        timeoutMs: 10_000
+      });
+      assert.equal(result.ok, false);
+      assert.ok(result.failureMessage.includes("hit rate limits"));
+      assert.ok(result.failureMessage.includes("Try: --model"));
+    } finally {
+      cleanTempDir(binDir);
+    }
+  });
+
+  it("maps auth-error output to a sign-in failure message", async () => {
+    const binDir = createTempDir("facade-test-");
+    try {
+      const agyPath = installFakeAgy(binDir, "auth-error");
+      const result = await runAntigravityTask(binDir, {
+        prompt: "x",
+        binary: agyPath,
+        timeoutMs: 10_000
+      });
+      assert.equal(result.ok, false);
+      assert.ok(result.failureMessage.includes("not authenticated"));
+    } finally {
+      cleanTempDir(binDir);
+    }
+  });
+
+  it("prepends a warning when a read-only task modifies the working tree", async () => {
+    const repoDir = createTempDir("facade-readonly-");
+    const binDir = createTempDir("facade-bin-");
+    try {
+      initGitRepo(repoDir);
+      const agyPath = installFakeAgy(binDir, "write-file");
+      const result = await runAntigravityTask(repoDir, {
+        prompt: "x",
+        write: false,
+        binary: agyPath,
+        timeoutMs: 10_000
+      });
+      assert.equal(result.ok, true);
+      assert.ok(result.rawOutput.includes("WARNING: this read-only task modified the working tree"));
+      assert.ok(result.rawOutput.includes("agy-wrote.txt"));
+    } finally {
+      cleanTempDir(repoDir);
+      cleanTempDir(binDir);
+    }
   });
 });

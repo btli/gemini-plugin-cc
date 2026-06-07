@@ -44,7 +44,7 @@ export function buildAgyArgs(options = {}) {
   } = options;
 
   const timeoutSeconds = Math.max(1, Math.ceil(timeoutMs / 1000));
-  const args = ["--print", "", "--print-timeout", `${timeoutSeconds}s`];
+  const args = ["--print", "", "--print-timeout", `${timeoutSeconds}s`]; // empty --print value = agy reads the prompt from stdin
   if (modelLabel) {
     args.push("--model", modelLabel);
   }
