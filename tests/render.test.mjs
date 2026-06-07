@@ -6,7 +6,7 @@ import {
   renderReviewResult,
   renderTaskResult,
   renderCancelReport
-} from "../plugins/gemini/scripts/lib/render.mjs";
+} from "../plugins/antigravity/scripts/lib/render.mjs";
 
 describe("renderSetupReport", () => {
   it("renders ready status", () => {

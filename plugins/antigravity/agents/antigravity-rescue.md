@@ -19,7 +19,7 @@ Do NOT grab simple asks that the main Claude thread can finish quickly.
 Invoke a single Bash call:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" task <arguments>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" task <arguments>
 ```
 
 ### Argument shaping rules

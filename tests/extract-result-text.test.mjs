@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { extractResultText, extractTextFromContent } from "../plugins/gemini/scripts/lib/gemini.mjs";
+import { extractResultText, extractTextFromContent } from "../plugins/antigravity/scripts/lib/antigravity.mjs";
 
 describe("extractTextFromContent", () => {
   it("returns string content directly", () => {

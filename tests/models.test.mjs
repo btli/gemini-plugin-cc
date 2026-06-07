@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveModel, suggestAlternatives, MODEL_ALIASES } from "../plugins/gemini/scripts/lib/models.mjs";
+import { resolveModel, suggestAlternatives, MODEL_ALIASES } from "../plugins/antigravity/scripts/lib/models.mjs";
 
 describe("resolveModel", () => {
   it("resolves 'flash' alias to gemini-3-flash-preview", () => {

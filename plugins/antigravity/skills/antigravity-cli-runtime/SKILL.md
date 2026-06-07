@@ -9,7 +9,7 @@ This skill describes the internal contract for invoking the Gemini companion run
 ## Primary helper
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" task "<raw arguments>"
+node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" task "<raw arguments>"
 ```
 
 ## Rules

@@ -30,9 +30,9 @@ export function runCompanion(args, options = {}) {
     import.meta.dirname ?? path.dirname(new URL(import.meta.url).pathname),
     "..",
     "plugins",
-    "gemini",
+    "antigravity",
     "scripts",
-    "gemini-companion.mjs"
+    "antigravity-companion.mjs"
   );
 
   const result = spawnSync(process.execPath, [scriptPath, ...args], {

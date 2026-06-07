@@ -13,7 +13,7 @@ Parse the user's arguments. Supported flags: `--background`, `--wait`, `--model 
 Before launching the subagent, check whether a resumable Gemini session exists:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" status --json
+node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" status --json
 ```
 
 If there is a recent task session and the user did not pass `--resume` or `--fresh`:
@@ -25,7 +25,7 @@ If there is a recent task session and the user did not pass `--resume` or `--fre
 Route the request to the `gemini:gemini-rescue` subagent. The subagent is a thin forwarder that invokes:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" task <arguments>
+node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" task <arguments>
 ```
 
 Pass all flags and the task description through.

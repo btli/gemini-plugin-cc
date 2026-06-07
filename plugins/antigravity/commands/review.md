@@ -14,7 +14,7 @@ Parse the user's arguments. Supported flags: `--base <ref>`, `--scope <auto|work
 Run immediately without confirmation:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" review --wait $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" review --wait $ARGUMENTS
 ```
 
 Return the stdout verbatim. Do not paraphrase, summarize, or add commentary.
@@ -23,7 +23,7 @@ Return the stdout verbatim. Do not paraphrase, summarize, or add commentary.
 Run without waiting:
 
 ```bash
-node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" review --background $ARGUMENTS
+node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" review --background $ARGUMENTS
 ```
 
 Tell the user the job was started and to check `/gemini:status` for progress.

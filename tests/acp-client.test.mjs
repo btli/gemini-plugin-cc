@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { GeminiAcpClient } from "../plugins/gemini/scripts/lib/acp-client.mjs";
+import { GeminiAcpClient } from "../plugins/antigravity/scripts/lib/acp-client.mjs";
 import { createTempDir } from "./helpers.mjs";
 
 const tempDirs = [];

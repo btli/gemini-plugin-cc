@@ -10,7 +10,7 @@ import {
   createSession,
   resumeSession,
   isAlive,
-} from "../plugins/gemini/scripts/lib/acp-lifecycle.mjs";
+} from "../plugins/antigravity/scripts/lib/acp-lifecycle.mjs";
 import { createTempDir } from "./helpers.mjs";
 import { installFakeGemini, createFakeGeminiEnv, removeFakeGemini } from "./fake-gemini-fixture.mjs";
 

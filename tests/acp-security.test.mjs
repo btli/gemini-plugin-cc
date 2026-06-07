@@ -7,7 +7,7 @@ import {
   spawnAcpClient,
   createSession,
   clearFlagCache,
-} from "../plugins/gemini/scripts/lib/acp-lifecycle.mjs";
+} from "../plugins/antigravity/scripts/lib/acp-lifecycle.mjs";
 
 import {
   installFakeGemini,

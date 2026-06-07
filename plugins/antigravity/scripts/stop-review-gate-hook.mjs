@@ -6,7 +6,7 @@ import path from "node:path";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
-import { getGeminiAuthStatus } from "./lib/gemini.mjs";
+import { getGeminiAuthStatus } from "./lib/antigravity.mjs";
 import { loadPromptTemplate, interpolateTemplate } from "./lib/prompts.mjs";
 import { getConfig, listJobs } from "./lib/state.mjs";
 import { sortJobsNewestFirst } from "./lib/job-control.mjs";
@@ -93,7 +93,7 @@ function parseStopReviewOutput(rawOutput) {
 }
 
 function runStopReview(cwd, input = {}) {
-  const scriptPath = path.join(SCRIPT_DIR, "gemini-companion.mjs");
+  const scriptPath = path.join(SCRIPT_DIR, "antigravity-companion.mjs");
   const prompt = buildStopReviewPrompt(input);
   const childEnv = {
     ...process.env,

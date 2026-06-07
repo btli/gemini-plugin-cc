@@ -5,7 +5,7 @@ disable-model-invocation: true
 allowed-tools: Bash(node:*)
 ---
 
-!`node "${CLAUDE_PLUGIN_ROOT}/scripts/gemini-companion.mjs" result $ARGUMENTS`
+!`node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" result $ARGUMENTS`
 
 Present the complete, unmodified command output to the user, including:
 - Job identification

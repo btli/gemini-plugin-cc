@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { binaryAvailable, terminateProcessTree, formatCommandFailure } from "../plugins/gemini/scripts/lib/process.mjs";
+import { binaryAvailable, terminateProcessTree, formatCommandFailure } from "../plugins/antigravity/scripts/lib/process.mjs";
 
 describe("binaryAvailable", () => {
   it("detects available binaries", () => {

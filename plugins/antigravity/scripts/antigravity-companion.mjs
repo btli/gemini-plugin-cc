@@ -22,7 +22,7 @@ import {
   readOutputSchema,
   findLatestTaskSession,
   installShutdownHandler
-} from "./lib/gemini.mjs";
+} from "./lib/antigravity.mjs";
 import {
   buildStatusSnapshot,
   buildSingleJobSnapshot,
