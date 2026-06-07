@@ -1,34 +1,36 @@
-# Gemini plugin for Claude Code
+# Antigravity plugin for Claude Code
 
-Use Gemini from inside Claude Code for code reviews or to delegate tasks to Gemini.
+Use Antigravity (agy) from inside Claude Code for code reviews or to delegate tasks.
 
-This plugin is for Claude Code users who want an easy way to start using Gemini from the workflow
-they already have.
+This plugin is for Claude Code users who want an easy way to use Google's Antigravity
+models from the workflow they already have. It replaces the deprecated
+[gemini-plugin-cc](https://github.com/btli/gemini-plugin-cc) Gemini CLI integration.
 
 ## What You Get
 
-- `/gemini:review` for a normal read-only Gemini review
-- `/gemini:adversarial-review` for a steerable challenge review
-- `/gemini:rescue`, `/gemini:status`, `/gemini:result`, and `/gemini:cancel` to delegate work and manage background jobs
+- `/antigravity:review` for a normal read-only Antigravity review
+- `/antigravity:adversarial-review` for a steerable challenge review
+- `/antigravity:rescue`, `/antigravity:status`, `/antigravity:result`, and `/antigravity:cancel` to delegate work and manage background jobs
 
 ## Requirements
 
-- **Google account or Gemini API key.**
-  - Usage will contribute to your Gemini usage limits. [Learn more](https://ai.google.dev/pricing).
+- **Antigravity** with a signed-in Google account.
+  - The `agy` CLI ships with [Antigravity](https://antigravity.google). Usage counts against your Antigravity limits.
 - **Node.js 18.18 or later**
+- **git** (reviews run inside disposable git worktrees)
 
 ## Install
 
 Add the marketplace in Claude Code:
 
 ```bash
-/plugin marketplace add btli/gemini-plugin-cc
+/plugin marketplace add btli/antigravity-plugin-cc
 ```
 
 Install the plugin:
 
 ```bash
-/plugin install gemini
+/plugin install antigravity
 ```
 
 Reload plugins:
@@ -40,41 +42,37 @@ Reload plugins:
 Then run:
 
 ```bash
-/gemini:setup
+/antigravity:setup
 ```
 
-`/gemini:setup` will tell you whether Gemini is ready. If Gemini CLI is missing and npm is available, it can offer to install Gemini for you.
+`/antigravity:setup` will tell you whether agy is ready.
 
-If you prefer to install Gemini yourself, use:
+If `agy` is missing, install [Antigravity](https://antigravity.google) — it bundles the CLI.
 
-```bash
-npm install -g @google/gemini-cli
-```
-
-If Gemini is installed but not logged in yet, run:
+If agy is installed but not signed in yet, run it interactively once and complete the Google sign-in:
 
 ```bash
-!gemini auth login
+agy
 ```
 
 After install, you should see:
 
 - the slash commands listed below
-- the `gemini:gemini-rescue` subagent in `/agents`
+- the `antigravity:antigravity-rescue` subagent in `/agents`
 
 One simple first run is:
 
 ```bash
-/gemini:review --background
-/gemini:status
-/gemini:result
+/antigravity:review --background
+/antigravity:status
+/antigravity:result
 ```
 
 ## Usage
 
-### `/gemini:review`
+### `/antigravity:review`
 
-Runs a normal Gemini review on your current work. It gives you a thorough code review covering bugs, security issues, performance problems, and maintainability concerns.
+Runs a normal Antigravity review on your current work. It gives you a thorough code review covering bugs, security issues, performance problems, and maintainability concerns.
 
 > [!NOTE]
 > Code review especially for multi-file changes might take a while. It's generally recommended to run it in the background.
@@ -84,26 +82,26 @@ Use it when you want:
 - a review of your current uncommitted changes
 - a review of your branch compared to a base branch like `main`
 
-Use `--base <ref>` for branch review. It also supports `--wait` and `--background`. It is not steerable and does not take custom focus text. Use [`/gemini:adversarial-review`](#geminiadversarial-review) when you want to challenge a specific decision or risk area.
+Use `--base <ref>` for branch review. It also supports `--wait` and `--background`. It is not steerable and does not take custom focus text. Use [`/antigravity:adversarial-review`](#antigravityadversarial-review) when you want to challenge a specific decision or risk area.
 
 Examples:
 
 ```bash
-/gemini:review
-/gemini:review --base main
-/gemini:review --background
+/antigravity:review
+/antigravity:review --base main
+/antigravity:review --background
 ```
 
-This command is read-only and will not perform any changes. When run in the background you can use [`/gemini:status`](#geministatus) to check on the progress and [`/gemini:cancel`](#geminicancel) to cancel the ongoing task.
+This command is read-only and will not perform any changes. When run in the background you can use [`/antigravity:status`](#antigravitystatus) to check on the progress and [`/antigravity:cancel`](#antigravitycancel) to cancel the ongoing task.
 
-### `/gemini:adversarial-review`
+### `/antigravity:adversarial-review`
 
 Runs a **steerable** review that questions the chosen implementation and design.
 
 It can be used to pressure-test assumptions, tradeoffs, failure modes, and whether a different approach would have been safer or simpler.
 
-It uses the same review target selection as `/gemini:review`, including `--base <ref>` for branch review.
-It also supports `--wait` and `--background`. Unlike `/gemini:review`, it can take extra focus text after the flags.
+It uses the same review target selection as `/antigravity:review`, including `--base <ref>` for branch review.
+It also supports `--wait` and `--background`. Unlike `/antigravity:review`, it can take extra focus text after the flags.
 
 Use it when you want:
 
@@ -114,22 +112,22 @@ Use it when you want:
 Examples:
 
 ```bash
-/gemini:adversarial-review
-/gemini:adversarial-review --base main challenge whether this was the right caching and retry design
-/gemini:adversarial-review --background look for race conditions and question the chosen approach
+/antigravity:adversarial-review
+/antigravity:adversarial-review --base main challenge whether this was the right caching and retry design
+/antigravity:adversarial-review --background look for race conditions and question the chosen approach
 ```
 
 This command is read-only. It does not fix code.
 
-### `/gemini:rescue`
+### `/antigravity:rescue`
 
-Hands a task to Gemini through the `gemini:gemini-rescue` subagent.
+Hands a task to Antigravity through the `antigravity:antigravity-rescue` subagent.
 
-Use it when you want Gemini to:
+Use it when you want Antigravity to:
 
 - investigate a bug
 - try a fix
-- continue a previous Gemini task
+- continue a previous Antigravity task
 - take a faster or cheaper pass with a smaller model
 
 > [!NOTE]
@@ -140,37 +138,38 @@ It supports `--background`, `--wait`, `--resume`, and `--fresh`. If you omit `--
 Examples:
 
 ```bash
-/gemini:rescue investigate why the tests started failing
-/gemini:rescue fix the failing test with the smallest safe patch
-/gemini:rescue --resume apply the top fix from the last run
-/gemini:rescue --model pro investigate the flaky integration test
-/gemini:rescue --model flash fix the issue quickly
-/gemini:rescue --background investigate the regression
+/antigravity:rescue investigate why the tests started failing
+/antigravity:rescue fix the failing test with the smallest safe patch
+/antigravity:rescue --resume apply the top fix from the last run
+/antigravity:rescue --model pro investigate the flaky integration test
+/antigravity:rescue --model flash fix the issue quickly
+/antigravity:rescue --background investigate the regression
 ```
 
-You can also just ask for a task to be delegated to Gemini:
+You can also just ask for a task to be delegated to Antigravity:
 
 ```text
-Ask Gemini to redesign the database connection to be more resilient.
+Ask Antigravity to redesign the database connection to be more resilient.
 ```
 
 **Notes:**
 
-- if you do not pass `--model`, the plugin defaults to `gemini-3.1-pro-preview`.
-- if you say `flash`, the plugin maps that to `gemini-3-flash-preview`
-- if you say `pro`, the plugin maps that to `gemini-3.1-pro-preview`
-- if you say `auto`, the plugin maps that to `auto-gemini-3` (lets Gemini choose the best model)
-- follow-up rescue requests can continue the latest Gemini task in the repo
+- if you do not pass `--model`, the plugin defaults to `Gemini 3.1 Pro (High)`.
+- if you say `flash`, the plugin maps that to `Gemini 3.5 Flash (High)`
+- if you say `pro`, the plugin maps that to `Gemini 3.1 Pro (High)`
+- if you say `sonnet`, the plugin maps that to `Claude Sonnet 4.6 (Thinking)`
+- if you say `opus`, the plugin maps that to `Claude Opus 4.6 (Thinking)`
+- follow-up rescue requests can continue the latest Antigravity task in the repo
 
-### `/gemini:status`
+### `/antigravity:status`
 
-Shows running and recent Gemini jobs for the current repository.
+Shows running and recent Antigravity jobs for the current repository.
 
 Examples:
 
 ```bash
-/gemini:status
-/gemini:status task-abc123
+/antigravity:status
+/antigravity:status task-abc123
 ```
 
 Use it to:
@@ -179,157 +178,158 @@ Use it to:
 - see the latest completed job
 - confirm whether a task is still running
 
-### `/gemini:result`
+### `/antigravity:result`
 
-Shows the final stored Gemini output for a finished job.
-When available, it also includes the Gemini session ID so you can reopen that run directly in Gemini with `gemini --resume <session-id>`.
-
-Examples:
-
-```bash
-/gemini:result
-/gemini:result task-abc123
-```
-
-### `/gemini:cancel`
-
-Gracefully cancels an active background Gemini job. The plugin sends a cancel signal to the running ACP session, waits for the worker to persist any partial output, and then confirms cancellation. If the worker does not exit cleanly within 3 seconds, it is force-terminated.
+Shows the final stored Antigravity output for a finished job.
+When available, it also includes the agy conversation ID so you can reopen that run directly in Antigravity with `agy --conversation <conversation-id>`.
 
 Examples:
 
 ```bash
-/gemini:cancel
-/gemini:cancel task-abc123
+/antigravity:result
+/antigravity:result task-abc123
 ```
 
-### `/gemini:setup`
+### `/antigravity:cancel`
 
-Checks whether Gemini is installed and authenticated.
-If Gemini is missing and npm is available, it can offer to install Gemini for you.
+Gracefully cancels an active background Antigravity job. The plugin sends a cancel signal to the running job, waits for the worker to persist any partial output, and then confirms cancellation. If the worker does not exit cleanly within 3 seconds, it is force-terminated.
 
-You can also use `/gemini:setup` to manage the optional review gate.
+Examples:
+
+```bash
+/antigravity:cancel
+/antigravity:cancel task-abc123
+```
+
+### `/antigravity:setup`
+
+Checks whether Antigravity is installed and authenticated.
+
+You can also use `/antigravity:setup` to manage the optional review gate.
 
 #### Enabling review gate
 
 ```bash
-/gemini:setup --enable-review-gate
-/gemini:setup --disable-review-gate
+/antigravity:setup --enable-review-gate
+/antigravity:setup --disable-review-gate
 ```
 
-When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted Gemini review based on Claude's response. If that review finds issues, the stop is blocked so Claude can address them first.
+When the review gate is enabled, the plugin uses a `Stop` hook to run a targeted Antigravity review based on Claude's response. If that review finds issues, the stop is blocked so Claude can address them first.
 
 > [!WARNING]
-> The review gate can create a long-running Claude/Gemini loop and may drain usage limits quickly. Only enable it when you plan to actively monitor the session.
+> The review gate can create a long-running Claude/Antigravity loop and may drain usage limits quickly. Only enable it when you plan to actively monitor the session.
+
+## Models
+
+The default model is `Gemini 3.1 Pro (High)`. Pass `--model <alias>` to any review or rescue command:
+
+| Alias | Model |
+|---|---|
+| `pro` (default) | Gemini 3.1 Pro (High) |
+| `pro-low` | Gemini 3.1 Pro (Low) |
+| `flash` | Gemini 3.5 Flash (High) |
+| `flash-medium` | Gemini 3.5 Flash (Medium) |
+| `flash-low` | Gemini 3.5 Flash (Low) |
+| `sonnet` | Claude Sonnet 4.6 (Thinking) |
+| `opus` | Claude Opus 4.6 (Thinking) |
+| `gpt-oss` | GPT-OSS 120B (Medium) |
+
+Unknown values are passed to agy verbatim (for custom models defined in your agy settings). If agy does not recognize the model it would silently fall back to Flash Medium — the plugin detects this and fails the run instead.
 
 ## Typical Flows
 
 ### Review Before Shipping
 
 ```bash
-/gemini:review
+/antigravity:review
 ```
 
-### Hand A Problem To Gemini
+### Hand A Problem To Antigravity
 
 ```bash
-/gemini:rescue investigate why the build is failing in CI
+/antigravity:rescue investigate why the build is failing in CI
 ```
 
 ### Start Something Long-Running
 
 ```bash
-/gemini:adversarial-review --background
-/gemini:rescue --background investigate the flaky test
+/antigravity:adversarial-review --background
+/antigravity:rescue --background investigate the flaky test
 ```
 
 Then check in with:
 
 ```bash
-/gemini:status
-/gemini:result
+/antigravity:status
+/antigravity:result
 ```
 
 ## Architecture
 
-This plugin mirrors the design of the official [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc), adapted for Google's Gemini ecosystem.
+This plugin mirrors the design of the official [Codex plugin for Claude Code](https://github.com/openai/codex-plugin-cc), adapted for Google's Antigravity ecosystem.
 
-| | Codex plugin | Gemini plugin |
+| | Codex plugin | Antigravity plugin |
 |---|---|---|
-| **CLI** | [`@openai/codex`](https://developers.openai.com/codex/cli/) | [`@google/gemini-cli`](https://github.com/google-gemini/gemini-cli) |
-| **Protocol** | JSON-RPC via Codex app server | JSON-RPC via ACP (Agent Communication Protocol) |
-| **Session model** | Managed by app server broker | Direct subprocess — no broker |
-| **Cancellation** | JSON-RPC cancel to app server | SIGTERM to worker, worker sends `session/cancel` on its own ACP connection |
-| **Config format** | TOML (`.codex/config.toml`) | JSON (`.gemini/settings.json`) |
-| **Auth** | ChatGPT account or OpenAI API key | Google account or Gemini API key |
-| **Model aliases** | `spark` &rarr; `gpt-5.3-codex-spark` | `flash` &rarr; `gemini-3-flash-preview`, `pro` &rarr; `gemini-3.1-pro-preview` |
+| **CLI** | [`@openai/codex`](https://developers.openai.com/codex/cli/) | `agy` (ships with [Antigravity](https://antigravity.google)) |
+| **Protocol** | JSON-RPC via Codex app server | `agy --print` subprocess, prompt via stdin |
+| **Session model** | Managed by app server broker | Conversation IDs parsed from agy's per-job glog |
+| **Cancellation** | JSON-RPC cancel to app server | SIGTERM to worker → SIGTERM to agy child |
+| **Auth** | ChatGPT account or OpenAI API key | Google account via `~/.gemini` |
+| **Model aliases** | `spark` &rarr; `gpt-5.3-codex-spark` | `flash` &rarr; `Gemini 3.5 Flash (High)`, `pro` &rarr; `Gemini 3.1 Pro (High)` |
 
-Both plugins share the same user-facing command surface (`review`, `adversarial-review`, `rescue`, `status`, `result`, `cancel`, `setup`) and the same background job system with foreground/background execution, session resume, and a stop-hook review gate.
+Both plugins share the same user-facing command surface (`review`, `adversarial-review`, `rescue`, `status`, `result`, `cancel`, `setup`) and the same background job system with foreground/background execution, conversation resume, and a stop-hook review gate.
 
 ### How it works
 
-The plugin spawns `gemini --acp` as a child process and communicates over stdin/stdout using the [ACP protocol](https://github.com/google-gemini/gemini-cli) (JSON-RPC 2.0). Each task gets its own ACP session with:
+The plugin spawns `agy --print` as a child process with the prompt written to stdin. Each task gets its own agy invocation with:
 
-- **Session setup timeouts** — all setup requests (`session/new`, `set_mode`, `set_model`, `session/load`) are wrapped in a 10-second timeout to prevent hangs if Gemini stalls during initialization.
-- **Graceful cancellation** — background workers install a SIGTERM handler that sends `session/cancel` on the active ACP connection before closing. This preserves partial output instead of force-killing the transport. The cancel command sends SIGTERM to the worker first, waits up to 3 seconds for clean shutdown, and falls back to process tree termination.
-- **Partial output preservation** — if a task fails (timeout, rate limit, crash), any streamed output accumulated before the failure is returned instead of being discarded.
-- **Sandboxed file access** — Gemini's file read/write requests are confined to the workspace directory with symlink escape prevention. Files over 5 MB are rejected to prevent memory exhaustion.
-- **Buffered logging** — streaming chunks are accumulated and flushed on line boundaries to reduce per-token sync I/O overhead.
+- **Watchdog timeouts** — agy's `--print-timeout` is the primary bound; a Node watchdog at timeout+30s catches hung processes.
+- **Graceful cancellation** — background workers install a SIGTERM handler that forwards the signal to the active agy child. The cancel command sends SIGTERM to the worker first, waits up to 3 seconds for clean shutdown, and falls back to process tree termination.
+- **Partial output preservation** — if a task fails (timeout, rate limit, crash), any output accumulated before the failure is returned instead of being discarded.
+- **Review worktree isolation** — reviews run inside a disposable detached git worktree that mirrors the working state. agy has no read-only mode and auto-approves file writes in print mode; the worktree ensures stray writes never touch your real working tree.
+- **Conversation resume** — conversation IDs are parsed from agy's per-job glog and stored in job state so you can resume with `--resume-last` or directly with `agy --conversation <id>`.
 
-## Gemini Integration
+## Antigravity Integration
 
-The Gemini plugin wraps the [Gemini CLI](https://github.com/google-gemini/gemini-cli). It uses the global `gemini` binary installed in your environment and applies the same configuration.
+The Antigravity plugin wraps the `agy` CLI that ships with [Antigravity](https://antigravity.google). It uses the global `agy` binary installed in your environment.
 
-### Common Configurations
+### Moving The Work Over To Antigravity
 
-If you want to change the default model that gets used by the plugin, you can define that inside your user-level or project-level `settings.json`. For example to always use `gemini-2.5-pro` for a specific project you can add the following to a `.gemini/settings.json` file at the root of the directory you started Claude in:
+Delegated tasks and any [stop gate](#enabling-review-gate) run can also be directly resumed inside Antigravity by running `agy --conversation <conversation-id>` with the specific conversation ID you received from running `/antigravity:result` or `/antigravity:status`.
 
-```json
-{
-  "model": "gemini-2.5-pro"
-}
-```
+This way you can review the Antigravity work or continue the work there.
 
-Your configuration will be picked up based on:
+## Migrating from the Gemini plugin
 
-- user-level config in `~/.gemini/settings.json`
-- project-level overrides in `.gemini/settings.json`
+Every `/gemini:*` command has a 1:1 `/antigravity:*` replacement (`/gemini:review` → `/antigravity:review`, etc.).
+Old Gemini job state is not migrated; finish or discard in-flight Gemini jobs before switching.
+Session resume now uses agy conversations: `agy --conversation <conversation-id>` replaces `gemini --resume <session-id>`.
 
-Check out the [Gemini CLI docs](https://geminicli.com/docs/) for more configuration options.
+## Known limitations
 
-### Moving The Work Over To Gemini
-
-Delegated tasks and any [stop gate](#enabling-review-gate) run can also be directly resumed inside Gemini by running `gemini --resume` either with the specific session ID you received from running `/gemini:result` or `/gemini:status` or by selecting it from the list.
-
-This way you can review the Gemini work or continue the work there.
+- Read-only **tasks** rely on prompt guidance plus post-run `git status` drift detection (with a prominent warning); only reviews get hard worktree isolation.
+- Review worktrees do not initialize git submodules; submodule content is absent from the worktree (the embedded diff still covers it).
+- No streaming progress: `/antigravity:status` shows the job log, not token-level streaming.
+- agy must be signed in via one interactive run before background jobs work.
 
 ## FAQ
 
-### Do I need a separate Gemini account for this plugin?
+### Do I need a separate account for this plugin?
 
-If you are already signed into Gemini on this machine, that account should work immediately here too. This plugin uses your local Gemini CLI authentication.
+If you are already signed into Antigravity on this machine, that account should work immediately here too. This plugin uses your local agy authentication stored in `~/.gemini`.
 
-If you only use Claude Code today and have not used Gemini yet, you will also need to sign in to Gemini with a Google account or an API key. [Gemini CLI is free to use](https://ai.google.dev/pricing), and `gemini auth login` supports Google OAuth sign-in. Run `/gemini:setup` to check whether Gemini is ready, and use `!gemini auth login` if it is not.
+If you only use Claude Code today and have not used Antigravity yet, you will need to sign in by running `agy` interactively once and completing Google sign-in. Run `/antigravity:setup` to check whether agy is ready.
 
-### Does the plugin use a separate Gemini runtime?
+### Does the plugin use a separate runtime?
 
-No. This plugin spawns your local [Gemini CLI](https://github.com/google-gemini/gemini-cli) as a subprocess using the ACP (Agent Communication Protocol) flag. There is no separate broker or app server — unlike the Codex plugin which relies on a Codex app server, the Gemini plugin communicates directly with the Gemini process over stdin/stdout.
+No. This plugin spawns your local `agy` CLI as a subprocess using print mode (`--print`). There is no separate broker or app server — the plugin writes the prompt to agy's stdin and reads the result from stdout.
 
 That means:
 
-- it uses the same Gemini install you would use directly
+- it uses the same agy install you would use directly
 - it uses the same local authentication state
 - it uses the same repository checkout and machine-local environment
-- sessions created by the plugin can be resumed directly with `gemini --resume`
-
-### Will it use the same Gemini config I already have?
-
-Yes. If you already use Gemini, the plugin picks up the same [configuration](#common-configurations).
-
-### Can I keep using my current API key setup?
-
-Yes. Because the plugin uses your local Gemini CLI, your existing sign-in method and config still apply.
-
-Set `GEMINI_API_KEY` or `GOOGLE_API_KEY` in your environment, or configure it in `~/.gemini/settings.json`.
+- conversations created by the plugin can be resumed directly with `agy --conversation <id>`
 
 ## License
 
