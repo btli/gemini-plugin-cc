@@ -12,7 +12,7 @@ import {
   getCurrentBranch,
   resolveReviewTarget,
   getWorkingTreeFileCount
-} from "../plugins/gemini/scripts/lib/git.mjs";
+} from "../plugins/antigravity/scripts/lib/git.mjs";
 
 let tmpDir;
 

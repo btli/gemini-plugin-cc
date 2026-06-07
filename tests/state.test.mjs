@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 
 import { createTempDir, cleanTempDir, initGitRepo } from "./helpers.mjs";
-import { loadState, saveState, upsertJob, listJobs, getConfig, setConfig } from "../plugins/gemini/scripts/lib/state.mjs";
+import { loadState, saveState, upsertJob, listJobs, getConfig, setConfig } from "../plugins/antigravity/scripts/lib/state.mjs";
 
 let tmpDir;
 

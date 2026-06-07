@@ -1,7 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { parseArgs, splitRawArgumentString } from "../plugins/gemini/scripts/lib/args.mjs";
+import { parseArgs, splitRawArgumentString } from "../plugins/antigravity/scripts/lib/args.mjs";
 
 describe("parseArgs", () => {
   it("parses boolean options", () => {
