@@ -1,26 +1,30 @@
+// Model IDs are agy display labels — the only form `agy --model` resolves.
+// Anything else silently falls back to agy's own default (Flash Medium);
+// the facade detects that via the propagated label in agy's log.
 export const MODELS = Object.freeze({
-  AUTO_3: "auto-gemini-3",
-  AUTO_2_5: "auto-gemini-2.5",
-  PRO_3: "gemini-3.1-pro-preview",
-  FLASH_3: "gemini-3-flash-preview",
-  PRO_2_5: "gemini-2.5-pro",
-  FLASH_2_5: "gemini-2.5-flash",
-  FLASH_LITE_2_5: "gemini-2.5-flash-lite"
+  PRO_HIGH: "Gemini 3.1 Pro (High)",
+  PRO_LOW: "Gemini 3.1 Pro (Low)",
+  FLASH_HIGH: "Gemini 3.5 Flash (High)",
+  FLASH_MEDIUM: "Gemini 3.5 Flash (Medium)",
+  FLASH_LOW: "Gemini 3.5 Flash (Low)",
+  SONNET: "Claude Sonnet 4.6 (Thinking)",
+  OPUS: "Claude Opus 4.6 (Thinking)",
+  GPT_OSS: "GPT-OSS 120B (Medium)"
 });
 
-export const DEFAULT_MODEL = MODELS.PRO_3;
+export const DEFAULT_MODEL = MODELS.PRO_HIGH;
 
 export const MODEL_ALIASES = new Map([
-  ["auto", MODELS.AUTO_3],
-  ["auto-3", MODELS.AUTO_3],
-  ["auto-2.5", MODELS.AUTO_2_5],
-  ["pro", MODELS.PRO_3],
-  ["flash", MODELS.FLASH_3],
-  ["pro-3", MODELS.PRO_3],
-  ["flash-3", MODELS.FLASH_3],
-  ["pro-2.5", MODELS.PRO_2_5],
-  ["flash-2.5", MODELS.FLASH_2_5],
-  ["flash-lite", MODELS.FLASH_LITE_2_5]
+  ["pro", MODELS.PRO_HIGH],
+  ["pro-high", MODELS.PRO_HIGH],
+  ["pro-low", MODELS.PRO_LOW],
+  ["flash", MODELS.FLASH_HIGH],
+  ["flash-high", MODELS.FLASH_HIGH],
+  ["flash-medium", MODELS.FLASH_MEDIUM],
+  ["flash-low", MODELS.FLASH_LOW],
+  ["sonnet", MODELS.SONNET],
+  ["opus", MODELS.OPUS],
+  ["gpt-oss", MODELS.GPT_OSS]
 ]);
 
 export function resolveModel(input) {

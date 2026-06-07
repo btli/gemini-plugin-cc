@@ -1,47 +1,49 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 
-import { resolveModel, suggestAlternatives, MODEL_ALIASES } from "../plugins/antigravity/scripts/lib/models.mjs";
+import {
+  resolveModel,
+  suggestAlternatives,
+  MODELS,
+  MODEL_ALIASES,
+  DEFAULT_MODEL
+} from "../plugins/antigravity/scripts/lib/models.mjs";
 
 describe("resolveModel", () => {
-  it("resolves 'flash' alias to gemini-3-flash-preview", () => {
-    assert.equal(resolveModel("flash"), "gemini-3-flash-preview");
+  it("resolves 'pro' to the Gemini 3.1 Pro (High) label", () => {
+    assert.equal(resolveModel("pro"), "Gemini 3.1 Pro (High)");
   });
 
-  it("resolves 'pro' alias to gemini-3.1-pro-preview", () => {
-    assert.equal(resolveModel("pro"), "gemini-3.1-pro-preview");
+  it("resolves 'pro-low'", () => {
+    assert.equal(resolveModel("pro-low"), "Gemini 3.1 Pro (Low)");
   });
 
-  it("resolves 'flash-lite' alias", () => {
-    assert.equal(resolveModel("flash-lite"), "gemini-2.5-flash-lite");
+  it("resolves 'flash' to the high reasoning tier", () => {
+    assert.equal(resolveModel("flash"), "Gemini 3.5 Flash (High)");
   });
 
-  it("resolves 'flash-3' alias", () => {
-    assert.equal(resolveModel("flash-3"), "gemini-3-flash-preview");
+  it("resolves 'flash-medium'", () => {
+    assert.equal(resolveModel("flash-medium"), "Gemini 3.5 Flash (Medium)");
   });
 
-  it("resolves 'pro-3' alias", () => {
-    assert.equal(resolveModel("pro-3"), "gemini-3.1-pro-preview");
+  it("resolves 'flash-low'", () => {
+    assert.equal(resolveModel("flash-low"), "Gemini 3.5 Flash (Low)");
   });
 
-  it("resolves 'flash-2.5' alias", () => {
-    assert.equal(resolveModel("flash-2.5"), "gemini-2.5-flash");
+  it("resolves 'sonnet'", () => {
+    assert.equal(resolveModel("sonnet"), "Claude Sonnet 4.6 (Thinking)");
   });
 
-  it("resolves 'pro-2.5' alias", () => {
-    assert.equal(resolveModel("pro-2.5"), "gemini-2.5-pro");
+  it("resolves 'opus'", () => {
+    assert.equal(resolveModel("opus"), "Claude Opus 4.6 (Thinking)");
   });
 
-  it("resolves 'auto' alias to auto-gemini-3", () => {
-    assert.equal(resolveModel("auto"), "auto-gemini-3");
+  it("resolves 'gpt-oss'", () => {
+    assert.equal(resolveModel("gpt-oss"), "GPT-OSS 120B (Medium)");
   });
 
-  it("resolves 'auto-2.5' alias", () => {
-    assert.equal(resolveModel("auto-2.5"), "auto-gemini-2.5");
-  });
-
-  it("passes through unknown model names", () => {
-    assert.equal(resolveModel("gemini-custom-model"), "gemini-custom-model");
+  it("passes through unknown values verbatim (custom models in agy settings)", () => {
+    assert.equal(resolveModel("My Custom Model"), "My Custom Model");
   });
 
   it("returns null for null input", () => {
@@ -52,22 +54,30 @@ describe("resolveModel", () => {
     assert.equal(resolveModel(""), null);
   });
 
-  it("is case-insensitive", () => {
-    assert.equal(resolveModel("Flash"), "gemini-3-flash-preview");
-    assert.equal(resolveModel("PRO"), "gemini-3.1-pro-preview");
+  it("is case-insensitive for aliases", () => {
+    assert.equal(resolveModel("PRO"), "Gemini 3.1 Pro (High)");
+    assert.equal(resolveModel("Flash"), "Gemini 3.5 Flash (High)");
+  });
+});
+
+describe("DEFAULT_MODEL", () => {
+  it("is Gemini 3.1 Pro (High)", () => {
+    assert.equal(DEFAULT_MODEL, MODELS.PRO_HIGH);
+    assert.equal(DEFAULT_MODEL, "Gemini 3.1 Pro (High)");
   });
 });
 
 describe("suggestAlternatives", () => {
-  it("returns aliases excluding the failed model", () => {
-    const suggestions = suggestAlternatives("gemini-3-flash-preview");
+  it("excludes aliases that map to the failed label", () => {
+    const suggestions = suggestAlternatives(MODELS.PRO_HIGH);
     assert.ok(suggestions.length > 0);
-    assert.ok(!suggestions.includes("flash"));
-    assert.ok(!suggestions.includes("flash-3"));
+    assert.ok(!suggestions.includes("pro"));
+    assert.ok(!suggestions.includes("pro-high"));
+    assert.ok(suggestions.includes("flash"));
   });
 
-  it("returns all aliases when failed model is unknown", () => {
+  it("returns all aliases when the failed label is unknown", () => {
     const suggestions = suggestAlternatives("unknown-model");
-    assert.ok(suggestions.length === MODEL_ALIASES.size);
+    assert.equal(suggestions.length, MODEL_ALIASES.size);
   });
 });
