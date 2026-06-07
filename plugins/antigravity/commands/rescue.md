@@ -1,10 +1,10 @@
 ---
-description: Hand a task to Gemini through the gemini:gemini-rescue subagent
+description: Hand a task to Gemini through the antigravity:antigravity-rescue subagent
 argument-hint: '[--background] [--wait] [--model <model>] [--resume] [--fresh] [task description...]'
-allowed-tools: Bash(node:*), Agent(gemini:gemini-rescue), AskUserQuestion
+allowed-tools: Bash(node:*), Agent(antigravity:antigravity-rescue), AskUserQuestion
 ---
 
-This command delegates work to Gemini through the `gemini:gemini-rescue` subagent.
+This command delegates work to Gemini through the `antigravity:antigravity-rescue` subagent.
 
 Parse the user's arguments. Supported flags: `--background`, `--wait`, `--model <model>`, `--resume`, `--fresh`. Everything after the flags is the task description.
 
@@ -22,7 +22,7 @@ If there is a recent task session and the user did not pass `--resume` or `--fre
 
 ## Execution
 
-Route the request to the `gemini:gemini-rescue` subagent. The subagent is a thin forwarder that invokes:
+Route the request to the `antigravity:antigravity-rescue` subagent. The subagent is a thin forwarder that invokes:
 
 ```bash
 node "${CLAUDE_PLUGIN_ROOT}/scripts/antigravity-companion.mjs" task <arguments>
